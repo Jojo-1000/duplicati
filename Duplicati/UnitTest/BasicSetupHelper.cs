@@ -67,6 +67,8 @@ namespace Duplicati.UnitTest
 
         protected static readonly ISystemIO systemIO = SystemIO.IO_OS;
 
+        public bool KeepLogfile { get; protected set; }
+
         /// <summary>
         /// Writes a message to TestContext.Progress and Console.Out
         /// </summary>
@@ -82,6 +84,7 @@ namespace Duplicati.UnitTest
         [OneTimeSetUp]
         public virtual void OneTimeSetUp()
         {
+            KeepLogfile = false;
             if (DEBUG_OUTPUT)
             {
                 Console.SetOut(TestContext.Progress);
@@ -121,7 +124,7 @@ namespace Duplicati.UnitTest
             {
                 systemIO.DirectoryDelete(this.RESTOREFOLDER, true);
             }
-            if (systemIO.FileExists(this.LOGFILE))
+            if (systemIO.FileExists(this.LOGFILE) && !KeepLogfile)
             {
                 systemIO.FileDelete(this.LOGFILE);
             }
