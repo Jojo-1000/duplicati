@@ -24,6 +24,8 @@ using Duplicati.Library.Utility;
 using FluentFTP;
 using FluentFTP.Client.BaseClient;
 using FluentFTP.Exceptions;
+using FluentFTP.GnuTLS;
+using FluentFTP.GnuTLS.Enums;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -51,6 +53,7 @@ namespace Duplicati.Library.Backend.AlternativeFTP
         private const string CONFIG_KEY_AFTP_DATA_CONNECTION_TYPE = "aftp-data-connection-type";
         private const string CONFIG_KEY_AFTP_SSL_PROTOCOLS = "aftp-ssl-protocols";
         private const string CONFIG_KEY_AFTP_UPLOAD_DELAY = "aftp-upload-delay";
+        private const string CONFIG_KEY_AFTP_GNUTLS = "aftp-gnutls";
 
         private const string TEST_FILE_NAME = "duplicati-access-privileges-test.tmp";
         private const string TEST_FILE_CONTENT = "This file is used by Duplicati to test access permissions and can be safely deleted.";
@@ -70,6 +73,15 @@ namespace Duplicati.Library.Backend.AlternativeFTP
         private readonly byte[] _copybuffer = new byte[CoreUtility.DEFAULT_BUFFER_SIZE];
         private readonly bool _accepAllCertificates;
         private readonly string[] _validHashes;
+
+
+        private static readonly Dictionary<string, GnuCommand> GNUTLS_PROTOCOL_MAP = new Dictionary<string, GnuCommand>()
+        {
+            { "Tls", GnuCommand.Protocol_Tls10 },
+            { "Tls11", GnuCommand.Protocol_Tls11 },
+            { "Tls12", GnuCommand.Protocol_Tls12 },
+            { "Tls13", GnuCommand.Protocol_Tls13 }
+        };
 
         /// <summary>
         /// The localized name to display for this backend
@@ -94,14 +106,17 @@ namespace Duplicati.Library.Backend.AlternativeFTP
         {
             get
             {
+                string[] sslProtocols = Enum.GetNames(typeof(SslProtocols))
+                    .Union(GNUTLS_PROTOCOL_MAP.Keys).ToArray();
                 return new List<ICommandLineArgument>(new ICommandLineArgument[] {
                           new CommandLineArgument("auth-password", CommandLineArgument.ArgumentType.Password, Strings.DescriptionAuthPasswordShort, Strings.DescriptionAuthPasswordLong),
                           new CommandLineArgument("auth-username", CommandLineArgument.ArgumentType.String, Strings.DescriptionAuthUsernameShort, Strings.DescriptionAuthUsernameLong),
                           new CommandLineArgument("disable-upload-verify", CommandLineArgument.ArgumentType.Boolean, Strings.DescriptionDisableUploadVerifyShort, Strings.DescriptionDisableUploadVerifyLong),
                           new CommandLineArgument(CONFIG_KEY_AFTP_DATA_CONNECTION_TYPE, CommandLineArgument.ArgumentType.Enumeration, Strings.DescriptionFtpDataConnectionTypeShort, Strings.DescriptionFtpDataConnectionTypeLong, DEFAULT_DATA_CONNECTION_TYPE_STRING, null, Enum.GetNames(typeof(FtpDataConnectionType))),
                           new CommandLineArgument(CONFIG_KEY_AFTP_ENCRYPTION_MODE, CommandLineArgument.ArgumentType.Enumeration, Strings.DescriptionFtpEncryptionModeShort, Strings.DescriptionFtpEncryptionModeLong, DEFAULT_ENCRYPTION_MODE_STRING, null, Enum.GetNames(typeof(FtpEncryptionMode))),
-                          new CommandLineArgument(CONFIG_KEY_AFTP_SSL_PROTOCOLS, CommandLineArgument.ArgumentType.Flags, Strings.DescriptionSslProtocolsShort, Strings.DescriptionSslProtocolsLong, DEFAULT_SSL_PROTOCOLS_STRING, null, Enum.GetNames(typeof(SslProtocols))),
+                          new CommandLineArgument(CONFIG_KEY_AFTP_SSL_PROTOCOLS, CommandLineArgument.ArgumentType.Flags, Strings.DescriptionSslProtocolsShort, Strings.DescriptionSslProtocolsLong, DEFAULT_SSL_PROTOCOLS_STRING, null, sslProtocols),
                           new CommandLineArgument(CONFIG_KEY_AFTP_UPLOAD_DELAY, CommandLineArgument.ArgumentType.Timespan, Strings.DescriptionUploadDelayShort, Strings.DescriptionUploadDelayLong, DEFAULT_UPLOAD_DELAY_STRING),
+                          new CommandLineArgument(CONFIG_KEY_AFTP_GNUTLS, CommandLineArgument.ArgumentType.Boolean, Strings.DescriptionGnuTLSShort, Strings.DescriptionGnuTLSLong, "false")
                      });
             }
         }
@@ -203,12 +218,50 @@ namespace Duplicati.Library.Backend.AlternativeFTP
                 sslProtocols = DEFAULT_SSL_PROTOCOLS;
             }
 
-            _ftpConfig = new FtpConfig
+            bool useGnuTLS = CoreUtility.ParseBoolOption(options, CONFIG_KEY_AFTP_GNUTLS);
+            _ftpConfig = BuildConfig(dataConnectionType, encryptionMode, sslProtocols, sslProtocolsString, useGnuTLS);
+        }
+
+        private static FtpConfig BuildConfig(FtpDataConnectionType dataConnectionType, FtpEncryptionMode encryptionMode, SslProtocols sslProtocols, string sslProtocolsString, bool useGnuTLS)
+        {
+            FtpConfig config = new FtpConfig
             {
                 DataConnectionType = dataConnectionType,
                 EncryptionMode = encryptionMode,
                 SslProtocols = sslProtocols,
             };
+            if (useGnuTLS)
+            {
+                IList<GnuOption> securityOptions = null;
+                if (sslProtocols != SslProtocols.None)
+                {
+                    // SSL protocols need to be specified explicitly for GnuTLS
+                    securityOptions = new List<GnuOption>()
+                    {
+                        new GnuOption(GnuOperator.Exclude, GnuCommand.Protocol_All)
+                    };
+                    string[] protocols = sslProtocolsString.Split(',');
+                    foreach(var p in protocols)
+                    {
+                        if(GNUTLS_PROTOCOL_MAP.TryGetValue(p.Trim(), out GnuCommand value))
+                        {
+                            securityOptions.Add(new GnuOption(GnuOperator.Include, value));
+                        }
+                    }
+                }
+
+                config.CustomStream = typeof(GnuTlsStream);
+                config.CustomStreamConfig = new GnuConfig()
+                {
+                    SecuritySuite = FluentFTP.GnuTLS.Enums.GnuSuite.Normal,
+                    SetALPNControlConnection = string.Empty,
+                    SetALPNDataConnection = string.Empty,
+                    SecurityOptions = securityOptions,
+                    // TODO: Remove when FluentFTP.GnuTLS implements thread-safe deinit
+                    DeInitGnuTls = false
+                };
+            };
+            return config;
         }
 
         public IEnumerable<IFileEntry> List()
@@ -449,7 +502,7 @@ namespace Duplicati.Library.Backend.AlternativeFTP
                 }
                 catch (Exception e)
                 {
-                    if (e.InnerException != null) { e =  e.InnerException; }
+                    if (e.InnerException != null) { e = e.InnerException; }
                     throw new Exception(string.Format(Strings.ErrorDeleteFile, e.Message), e);
                 }
             }
