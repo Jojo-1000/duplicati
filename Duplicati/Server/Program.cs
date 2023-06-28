@@ -66,7 +66,7 @@ namespace Duplicati.Server
         /// <summary>
         /// List of completed task results
         /// </summary>
-        public static readonly List<KeyValuePair<long, Exception>> TaskResultCache = new List<KeyValuePair<long, Exception>>();
+        public static readonly List<Tuple<long, Library.Interface.IBasicResults, Exception>> TaskResultCache = new List<Tuple<long, Library.Interface.IBasicResults, Exception>>();
 
         /// <summary>
         /// The maximum number of completed task results to keep in memory
@@ -317,7 +317,8 @@ namespace Duplicati.Server
 
         private static void SetWorkerThread()
         {
-            WorkThread = new Duplicati.Library.Utility.WorkerThread<Runner.IRunnerData>((x) => { Runner.Run(x, true); },
+            WorkThread = new Duplicati.Library.Utility.WorkerThread<Runner.IRunnerData>(
+                (x) => { x.Results = Runner.Run(x, true); },
                 LiveControl.State == LiveControls.LiveControlState.Paused);
             Scheduler = new Scheduler(WorkThread);
 
@@ -338,27 +339,27 @@ namespace Duplicati.Server
                 Program.Scheduler.Reschedule();
             };
 
-            void RegisterTaskResult(long id, Exception ex)
+            void RegisterTaskResult(Runner.IRunnerData data, Exception ex)
             {
                 lock (MainLock)
                 {
                     // If the new results says it crashed, we store that instead of success
-                    if (Program.TaskResultCache.Count > 0 && Program.TaskResultCache.Last().Key == id)
+                    if (Program.TaskResultCache.Count > 0 && Program.TaskResultCache.Last().Item1 == data.TaskID)
                     {
-                        if (ex != null && Program.TaskResultCache.Last().Value == null)
+                        if (ex != null && Program.TaskResultCache.Last().Item3 == null)
                             Program.TaskResultCache.RemoveAt(Program.TaskResultCache.Count - 1);
                         else
                             return;
                     }
 
-                    Program.TaskResultCache.Add(new KeyValuePair<long, Exception>(id, ex));
+                    Program.TaskResultCache.Add(new Tuple<long, Library.Interface.IBasicResults, Exception>(data.TaskID, data.Results, ex));
                     while (Program.TaskResultCache.Count > MAX_TASK_RESULT_CACHE_SIZE)
                         Program.TaskResultCache.RemoveAt(0);
                 }
             }
 
-            Program.WorkThread.CompletedWork += (worker, task) => { RegisterTaskResult(task.TaskID, null); };
-            Program.WorkThread.OnError += (worker, task, exception) => { RegisterTaskResult(task.TaskID, exception); };
+            Program.WorkThread.CompletedWork += (worker, task) => { RegisterTaskResult(task, null); };
+            Program.WorkThread.OnError += (worker, task, exception) => { RegisterTaskResult(task, exception); };
         }
 
         private static void SetLiveControls()

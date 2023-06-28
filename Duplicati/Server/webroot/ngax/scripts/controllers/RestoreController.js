@@ -419,13 +419,14 @@ backupApp.controller('RestoreController', function ($rootScope, $scope, $routePa
             $scope.connecting = false;
             $scope.ConnectionProgress = '';
 
-            if (resp.data.Status == 'Completed')
-            {
+            if (resp.data.Status == 'Completed') {
                 $scope.restore_step = 3;
-            }
-            else
-            {
+            } else if (resp.data.Status != 'Warning') {
                 DialogService.dialog(gettextCatalog.getString('Error'), gettextCatalog.getString('Failed to restore files: {{message}}', { message: resp.data.ErrorMessage }));
+                $scope.restore_step = 1;
+            } else {
+                DialogService.dialog(gettextCatalog.getString('Warning'), gettextCatalog.getString('Some files might not be restored.'));
+                $scope.restore_step = 1;
             }
         }, function(resp) {
             var message = resp.statusText;

@@ -42,18 +42,33 @@ namespace Duplicati.Server.WebServer.RESTMethods
 
                 if (tasks.FirstOrDefault(x => x.TaskID == taskid) == null)
                 {
-                    KeyValuePair<long, Exception>[] matches;
+                    Tuple<long, Library.Interface.IBasicResults, Exception>[] matches;
                     lock(Program.MainLock)
-                        matches = Program.TaskResultCache.Where(x => x.Key == taskid).ToArray();
-                    
+                        matches = Program.TaskResultCache.Where(x => x.Item1 == taskid).ToArray();
+
                     if (matches.Length == 0)
                         info.ReportClientError("No such task found", System.Net.HttpStatusCode.NotFound);
                     else
-                        info.OutputOK(new { 
-                            Status = matches[0].Value == null ? "Completed" : "Failed", 
-                            ErrorMessage = matches[0].Value == null ? null : matches[0].Value.Message,
-                            Exception = matches[0].Value == null ? null : matches[0].Value.ToString() 
-                        });                            
+                    {
+                        Exception ex = matches[0].Item3;
+                        Library.Interface.IBasicResults results = matches[0].Item2;
+                        string status = "Failed";
+                        string errorMessage = ex != null ? ex.Message : null;
+                        if (ex == null && results != null)
+                        {
+                            status = results.ParsedResult == Library.Interface.ParsedResultType.Success ? "Success": results.ParsedResult.ToString();
+                            if (results.Errors.Any())
+                            {
+                                errorMessage = string.Join(Environment.NewLine, results.Errors);
+                            }
+                        }
+                        info.OutputOK(new
+                        {
+                            Status = status,
+                            ErrorMessage = errorMessage,
+                            Exception = ex == null ? null : ex.ToString()
+                        });
+                    }
                 }
                 else
                 {

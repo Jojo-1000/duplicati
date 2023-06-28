@@ -31,6 +31,7 @@ namespace Duplicati.Server
         {
             Duplicati.Server.Serialization.Interface.IBackup Backup { get; }
             IDictionary<string, string> ExtraOptions { get; }
+            IBasicResults Results { get; set; }
             string[] FilterStrings { get; }
             void Stop(bool allowCurrentFileToFinish);
             void Abort();
@@ -47,8 +48,8 @@ namespace Duplicati.Server
             public Duplicati.Server.Serialization.DuplicatiOperation Operation { get; internal set; }
             public Duplicati.Server.Serialization.Interface.IBackup Backup { get; internal set; }
             public IDictionary<string, string> ExtraOptions { get; internal set; }
+            public IBasicResults Results { get; set; }
             public string[] FilterStrings { get; internal set; }
-
             public string BackupID { get { return Backup.ID; } }
             public long TaskID { get { return m_taskID; } }
 
@@ -629,10 +630,11 @@ namespace Duplicati.Server
                 UpdateMetadataError(data.Backup, ex);
                 Library.UsageReporter.Reporter.Report(ex);
 
-                if (!fromQueue)
-                    throw;
+                //if (!fromQueue)
+                // WorkerThread should receive exceptions
+                throw;
 
-                return null;
+                //return null;
             }
             finally
             {
