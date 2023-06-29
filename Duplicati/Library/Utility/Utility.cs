@@ -18,14 +18,15 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Text;
 using System.Text.RegularExpressions;
 using Duplicati.Library.Common.IO;
 using Duplicati.Library.Common;
 using System.Globalization;
-using System.Threading;
 using System.Security.Cryptography;
+using Duplicati.Library.Interface;
 
 namespace Duplicati.Library.Utility
 {
@@ -35,7 +36,7 @@ namespace Duplicati.Library.Utility
         /// Size of buffers for copying stream
         /// </summary>
         public static long DEFAULT_BUFFER_SIZE => SystemContextSettings.Buffersize;
-
+        
         /// <summary>
         /// A cache of the FileSystemCaseSensitive property, which is computed upon the first access.
         /// </summary>
@@ -87,16 +88,16 @@ namespace Duplicati.Library.Utility
                 }
 
             buf = buf ?? new byte[DEFAULT_BUFFER_SIZE];
-
+            
             int read;
 			long total = 0;
 			while ((read = source.Read(buf, 0, buf.Length)) != 0)
 			{
 				target.Write(buf, 0, read);
 				total += read;
-			}
-
-			return total;
+            }
+            
+            return total;
         }
 
         /// <summary>
@@ -137,6 +138,45 @@ namespace Duplicati.Library.Utility
             }
 
             return total;
+        }
+
+        /// <summary>
+        /// Get the length of a stream.
+        /// Attempt to use the stream's Position property if allowPositionFallback is <c>true</c> (only valid if stream is at the end).
+        /// </summary>
+        /// <param name="stream">Stream to get the length of.</param>
+        /// <param name="allowPositionFallback">Attempt to use the Position property if <c>true</c> and the Length property is not available (only valid if stream is at the end).</param>
+        /// <returns>Returns the stream's length, if available, or null if not supported by the stream.</returns>
+        public static long? GetStreamLength(Stream stream, bool allowPositionFallback = true)
+        {
+            return GetStreamLength(stream, out bool _, allowPositionFallback);
+        }
+
+        /// <summary>
+        /// Get the length of a stream.
+        /// Attempt to use the stream's Position property if allowPositionFallback is <c>true</c> (only valid if stream is at the end).
+        /// </summary>
+        /// <param name="stream">Stream to get the length of.</param>
+        /// <param name="isStreamPosition">Indicates if the Position value was used instead of Length.</param>
+        /// <param name="allowPositionFallback">Attempt to use the Position property if <c>true</c> and the Length property is not available (only valid if stream is at the end).</param>
+        /// <returns>Returns the stream's length, if available, or null if not supported by the stream.</returns>
+        public static long? GetStreamLength(Stream stream, out bool isStreamPosition, bool allowPositionFallback = true)
+        {
+            isStreamPosition = false;
+            long? streamLength = null;
+            try { streamLength = stream.Length; } catch { }
+            if (!streamLength.HasValue && allowPositionFallback)
+            {
+                try
+                {
+                    // Hack: This is a fall-back method to detect the source stream size, assuming the current position is the end of the stream.
+                    streamLength = stream.Position;
+                    isStreamPosition = true;
+                }
+                catch { } // 
+            }
+
+            return streamLength;
         }
 
         /// <summary>
@@ -1482,6 +1522,35 @@ namespace Duplicati.Library.Utility
         public static T Await<T>(this Task<T> task)
         {
             return task.GetAwaiter().GetResult();
+        }
+
+        /// <summary>
+        /// Utility that computes the delay before the next retry of an operation, optionally using exponential backoff.
+        /// Note: when using exponential backoff, the exponent is clamped at 10.
+        /// </summary>
+        /// <param name="retryDelay">Value of one delay unit</param>
+        /// <param name="retryAttempt">The attempt number (e.g. 1 for the first retry, 2 for the second retry, etc.)</param>
+        /// <param name="useExponentialBackoff">Whether to use exponential backoff</param>
+        /// <returns>The computed delay</returns>
+        public static TimeSpan GetRetryDelay(TimeSpan retryDelay, int retryAttempt, bool useExponentialBackoff)
+        {
+            if (retryAttempt < 1)
+            {
+                throw new ArgumentException("The attempt number must not be less than 1.", nameof(retryAttempt));
+            }
+
+            TimeSpan delay;
+            if (useExponentialBackoff)
+            {
+                var delayTicks = retryDelay.Ticks << Math.Min(retryAttempt - 1, 10);
+                delay = TimeSpan.FromTicks(delayTicks);
+            }
+            else
+            {
+                delay = retryDelay;
+            }
+
+            return delay;
         }
     }
 }

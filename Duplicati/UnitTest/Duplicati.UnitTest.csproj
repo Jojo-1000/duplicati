@@ -33,6 +33,10 @@
     <ProjectReference Include="..\Library\Backend\OAuthHelper\Duplicati.Library.OAuthHelper.csproj">
     </ProjectReference>
     <ProjectReference Include="..\Library\Backend\Rclone\Duplicati.Library.Backend.Rclone.csproj">
+	</ProjectReference>
+    <ProjectReference Include="..\Library\Backend\Idrivee2\Duplicati.Library.Backend.Idrivee2.csproj">
+    </ProjectReference>
+    <ProjectReference Include="..\Library\Backend\OneDrive\Duplicati.Library.Backend.OneDrive.csproj">
     </ProjectReference>
     <ProjectReference Include="..\Library\Backend\S3\Duplicati.Library.Backend.S3.csproj">
     </ProjectReference>
@@ -64,7 +68,7 @@
     </ProjectReference>
     <ProjectReference Include="..\License\Duplicati.License.csproj">
     </ProjectReference>
-	  <ProjectReference Include="..\Server\Duplicati.Server.Serialization\Duplicati.Server.Serialization.csproj">
+    <ProjectReference Include="..\Server\Duplicati.Server.Serialization\Duplicati.Server.Serialization.csproj">
     </ProjectReference>
     <ProjectReference Include="..\Server\Duplicati.Server.csproj">
     </ProjectReference>

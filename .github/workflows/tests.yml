@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: "experiment/net5-split"
 
+env:
+  build_directory: "Duplicati/GUI/Duplicati.GUI.TrayIcon/bin/Release"
+
 jobs:
   unit_tests:
     name: Unit tests
@@ -33,6 +36,12 @@ jobs:
     - name: Run unit tests
       run: dotnet test --no-build --verbosity minimal Duplicati.sln
 
+    - name: Run Unit Tests (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        nuget install NUnit.Runners -Version 3.12.0 -OutputDirectory nunit
+        nunit/NUnit.ConsoleRunner.3.12.0/tools/nunit3-console.exe Duplicati/UnitTest/bin/Release/Duplicati.UnitTest.dll
+
   ui_tests:
     name: UI tests
     runs-on: ubuntu-latest
@@ -46,6 +55,12 @@ jobs:
       with:
         dotnet-version: 5.0.x
 
+    - name: Install Additional Dependencies
+      run: sudo apt-get install gtk-sharp2
+
+    - name: Build Duplicati
+      run: msbuild -p:Configuration=Release -p:DefineConstants=ENABLE_GTK Duplicati.sln
+
     - name: Set up Python
       uses: actions/setup-python@v2
       with:
@@ -55,6 +70,7 @@ jobs:
       run: |
         pip3 install selenium
         pip3 install --upgrade urllib3
+        pip3 install chromedriver-autoinstaller
 
     - name: Checkout source
       uses: actions/checkout@v2.3.4
@@ -68,4 +84,5 @@ jobs:
     - name: Run UI tests
       run: |
         ./Executables/net5/Duplicati.Server/bin/Debug/net5.0/Duplicati.Server &
-        python3 guiTests/guiTest.py
+        sleep 30
+        python3 guiTests/guiTest.py --use-chrome

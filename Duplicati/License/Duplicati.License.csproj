@@ -19,6 +19,18 @@
       <Link>licenses\gpg\License.txt</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
+    <Content Include="..\..\thirdparty\Otp.NET\Homepage.txt">
+      <Link>licenses\Otp.NET\Homepage.txt</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\..\thirdparty\Otp.NET\license.txt">
+      <Link>licenses\Otp.NET\license.txt</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\..\thirdparty\Otp.NET\licensedata.json">
+      <Link>licenses\Otp.NET\licensedata.json</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <Content Include="..\..\thirdparty\SharpCompress\download.txt">
       <Link>licenses\SharpCompress\download.txt</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -298,15 +310,15 @@
       <Link>licenses\MimeKit\licensedata.json</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="..\..\thirdparty\BoncyCastle\Homepage.txt">
+    <Content Include="..\..\thirdparty\BouncyCastle\Homepage.txt">
       <Link>licenses\BouncyCastle\Homepage.txt</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="..\..\thirdparty\BoncyCastle\license.txt">
+    <Content Include="..\..\thirdparty\BouncyCastle\license.txt">
       <Link>licenses\BouncyCastle\license.txt</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="..\..\thirdparty\BoncyCastle\licensedata.json">
+    <Content Include="..\..\thirdparty\BouncyCastle\licensedata.json">
       <Link>licenses\BouncyCastle\licensedata.json</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>

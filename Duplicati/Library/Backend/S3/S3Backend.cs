@@ -45,16 +45,25 @@ namespace Duplicati.Library.Backend
         public static readonly Dictionary<string, string> KNOWN_S3_PROVIDERS = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) {
             { "Amazon S3", "s3.amazonaws.com" },
             { "MyCloudyPlace (EU)", "s3.mycloudyplace.com" },
+            { "Impossible Cloud (US)", "us-west-1.storage.impossibleapi.net" },
+            { "Scaleway (Amsterdam, The Netherlands)", "s3.nl-ams.scw.cloud" },
+            { "Scaleway (Paris, France)", "s3.fr-par.scw.cloud" },
+            { "Scaleway (Warsaw, Poland)", "s3.pl-waw.scw.cloud" },
             { "Hosteurope", "cs.hosteurope.de" },
             { "Dunkel", "dcs.dunkel.de" },
             { "DreamHost", "objects.dreamhost.com" },
             { "dinCloud - Chicago", "d3-ord.dincloud.com" },
             { "dinCloud - Los Angeles", "d3-lax.dincloud.com" },
+            { "Poli Systems (CH)", "s3.polisystems.ch" },
             { "IBM COS (S3) Public US", "s3-api.us-geo.objectstorage.softlayer.net" },
             { "Storadera", "eu-east-1.s3.storadera.com" },
             { "Wasabi Hot Storage", "s3.wasabisys.com" },
             { "Wasabi Hot Storage (US West)", "s3.us-west-1.wasabisys.com" },
             { "Wasabi Hot Storage (EU Central)", "s3.eu-central-1.wasabisys.com" },
+            { "Infomaniak Swiss Backup cluster 1", "s3.swiss-backup.infomaniak.com" },
+            { "Infomaniak Swiss Backup cluster 2", "s3.swiss-backup02.infomaniak.com" },
+            { "Infomaniak Swiss Backup cluster 3", "s3.swiss-backup03.infomaniak.com" },
+            { "Infomaniak Public Cloud 1", "s3.pub1.infomaniak.cloud" },
         };
 
         //Updated list: http://docs.amazonwebservices.com/general/latest/gr/rande.html#s3_region
@@ -185,10 +194,14 @@ namespace Duplicati.Library.Backend
             if (options.ContainsKey("auth-password"))
                 awsKey = options["auth-password"];
 
-            if (options.ContainsKey("aws_access_key_id") || options.ContainsKey("aws-access-key-id"))
-                awsID = options["aws_access_key_id"] ?? options["aws-access-key-id"];
-            if (options.ContainsKey("aws_secret_access_key") || options.ContainsKey("aws-secret-access-key"))
-                awsKey = options["aws_secret_access_key"] ?? options["aws-secret-access-key"];
+            if (options.ContainsKey("aws_access_key_id"))
+                awsID = options["aws_access_key_id"];
+            if (options.ContainsKey("aws-access-key-id"))
+                awsID = options["aws-access-key-id"];
+            if (options.ContainsKey("aws_secret_access_key"))
+                awsKey = options["aws_secret_access_key"];
+            if (options.ContainsKey("aws-secret-access-key"))
+                awsKey = options["aws-secret-access-key"];
             if (!string.IsNullOrEmpty(uri.Username))
                 awsID = uri.Username;
             if (!string.IsNullOrEmpty(uri.Password))
@@ -337,10 +350,10 @@ namespace Duplicati.Library.Backend
             }
         }
 
-        public Task PutAsync(string remotename, string localname, CancellationToken cancelToken)
+        public async Task PutAsync(string remotename, string localname, CancellationToken cancelToken)
         {
             using (FileStream fs = File.Open(localname, FileMode.Open, FileAccess.Read, FileShare.Read))
-                return PutAsync(remotename, fs, cancelToken);
+                await PutAsync(remotename, fs, cancelToken);
         }
 
         public async Task PutAsync(string remotename, Stream input, CancellationToken cancelToken)

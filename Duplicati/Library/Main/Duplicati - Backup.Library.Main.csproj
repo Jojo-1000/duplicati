@@ -1,0 +1,65 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>    
+    <Copyright>LGPL, Copyright © Duplicati Team 2021</Copyright>
+    <Description>The main Duplicati implementation module</Description>
+  </PropertyGroup>
+  
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>	
+    <ProjectReference Include="..\..\License\Duplicati.License.csproj" />	
+    <ProjectReference Include="..\Compression\Duplicati.Library.Compression.csproj" />	
+    <ProjectReference Include="..\Utility\Duplicati.Library.Utility.csproj">
+    </ProjectReference>
+    <ProjectReference Include="..\DynamicLoader\Duplicati.Library.DynamicLoader.csproj">
+    </ProjectReference>
+    <ProjectReference Include="..\Interface\Duplicati.Library.Interface.csproj">
+    </ProjectReference>
+    <ProjectReference Include="..\Logging\Duplicati.Library.Logging.csproj">
+    </ProjectReference>
+    <ProjectReference Include="..\Snapshots\Duplicati.Library.Snapshots.csproj">
+    </ProjectReference>
+    <ProjectReference Include="..\SQLiteHelper\Duplicati.Library.SQLiteHelper.csproj">
+    </ProjectReference>
+    <ProjectReference Include="..\Localization\Duplicati.Library.Localization.csproj">
+    </ProjectReference>
+    <ProjectReference Include="..\UsageReporter\Duplicati.Library.UsageReporter.csproj">
+    </ProjectReference>
+    <ProjectReference Include="..\Modules\Builtin\Duplicati.Library.Modules.Builtin.csproj">
+    </ProjectReference>
+  </ItemGroup>
+  
+  <ItemGroup>
+    <EmbeddedResource Include="Database\Database schema\Schema.sql" />
+    <EmbeddedResource Include="Database\Database schema\1. Add index.sql" />
+    <EmbeddedResource Include="Database\Database schema\2. Use Lastmodified.sql" />
+    <EmbeddedResource Include="Database\Database schema\3. Add grace delete period.sql" />
+    <EmbeddedResource Include="Database\Database schema\4. Add index.sql" />
+    <EmbeddedResource Include="Database\Database schema\5. Optimize BlockSet-Tables.sql" />
+    <EmbeddedResource Include="Database\Database schema\6. Optimize FileSetEntry-Table.sql" />
+    <EmbeddedResource Include="Database\Database schema\7. Add index.sql" />
+    <EmbeddedResource Include="Database\Database schema\8. Add volume USN.sql" />
+    <EmbeddedResource Include="Database\Database schema\9. Refactor Paths.sql" />
+    <EmbeddedResource Include="Database\Database schema\10. Add IsFullBackup to Fileset table.sql" />
+    <EmbeddedResource Include="Database\Database schema\11. Add Block indices.sql" />
+    <EmbeddedResource Include="Database\Database schema\12. Performance Indexes.sql" />
+  </ItemGroup>
+  
+  <ItemGroup>
+    <Content Include="default_compressed_extensions.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.DotNet.Analyzers.Compatibility" Version="0.2.12-alpha">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+</Project>
