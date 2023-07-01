@@ -35,7 +35,7 @@ namespace Duplicati.Server.WebServer.RESTMethods
         private void CreateFolder(string uri, RequestInfo info)
         {
             using(var b = Duplicati.Library.DynamicLoader.BackendLoader.GetBackend(uri, new Dictionary<string, string>()))
-                b.CreateFolder();
+                b.CreateFolderAsync(CancellationToken.None).Wait();
 
             info.OutputOK();
         }
@@ -51,7 +51,9 @@ namespace Duplicati.Server.WebServer.RESTMethods
                 using(var tf = new Library.Utility.TempFile())
                 {
                     System.IO.File.WriteAllText(tf, data);
-                    b.PutAsync(remotename, tf, CancellationToken.None).Wait();
+                    // TODO: Use FauxStream if not supported
+                    using (var fs = System.IO.File.OpenWrite(tf))
+                        b.PutAsync(remotename, fs, CancellationToken.None).Wait();
                 }
             }
 
@@ -61,7 +63,7 @@ namespace Duplicati.Server.WebServer.RESTMethods
         private void ListFolder(string uri, RequestInfo info)
         {
             using(var b = Duplicati.Library.DynamicLoader.BackendLoader.GetBackend(uri, new Dictionary<string, string>()))
-                info.OutputOK(b.List());
+                info.OutputOK(b.ListAsync(CancellationToken.None).Result);
         }
 
         private void TestConnection(string url, RequestInfo info)
@@ -84,7 +86,7 @@ namespace Duplicati.Server.WebServer.RESTMethods
                     n.Configure(opts);
 
                 using (var b = Duplicati.Library.DynamicLoader.BackendLoader.GetBackend(url, new Dictionary<string, string>()))
-                    b.Test();
+                    b.TestAsync(CancellationToken.None).Wait();
 
                 info.OutputOK();
             }

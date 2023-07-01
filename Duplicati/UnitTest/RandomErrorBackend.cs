@@ -23,7 +23,7 @@ using System.Threading.Tasks;
 
 namespace Duplicati.UnitTest
 {
-    public class RandomErrorBackend : IBackend, IStreamingBackend
+    public class RandomErrorBackend : IBackend
     {
         static RandomErrorBackend() { WrappedBackend = "file"; }
 
@@ -31,7 +31,7 @@ namespace Duplicati.UnitTest
 
         public static string WrappedBackend { get; set; }
 
-        private IStreamingBackend m_backend;
+        private IBackend m_backend;
         public RandomErrorBackend()
         {
         }
@@ -40,7 +40,7 @@ namespace Duplicati.UnitTest
         public RandomErrorBackend(string url, Dictionary<string, string> options)
         {
             var u = new Library.Utility.Uri(url).SetScheme(WrappedBackend).ToString();
-            m_backend = (IStreamingBackend)Library.DynamicLoader.BackendLoader.GetBackend(u, options);
+            m_backend = Library.DynamicLoader.BackendLoader.GetBackend(u, options);
         }
 
         private void ThrowErrorRandom()
@@ -48,7 +48,9 @@ namespace Duplicati.UnitTest
             if (random.NextDouble() > 0.90)
                 throw new Exception("Random upload failure");
         }
-        #region IStreamingBackend implementation
+        #region IBackend implementation
+        public bool SupportsStreaming => true;
+
         public async Task PutAsync(string remotename, Stream stream, CancellationToken cancelToken)
         {
             var uploadError = random.NextDouble() > 0.9;
@@ -57,44 +59,33 @@ namespace Duplicati.UnitTest
                 await m_backend.PutAsync(remotename, f, cancelToken);
             ThrowErrorRandom();
         }
-        public void Get(string remotename, Stream stream)
+        
+        public Task<IList<IFileEntry>> ListAsync(CancellationToken cancelToken)
+        {
+            return m_backend.ListAsync(cancelToken);
+        }
+        public async Task GetAsync(string remotename, Stream destination, CancellationToken cancelToken)
         {
             ThrowErrorRandom();
-            m_backend.Get(remotename, stream);
+            await m_backend.GetAsync(remotename, destination, cancelToken);
             ThrowErrorRandom();
         }
-        #endregion
 
-        #region IBackend implementation
-        public IEnumerable<IFileEntry> List()
-        {
-            return m_backend.List();
-        }
-        public async Task PutAsync(string remotename, string filename, CancellationToken cancelToken)
+        public async Task DeleteAsync(string remotename, CancellationToken cancelToken)
         {
             ThrowErrorRandom();
-            await m_backend.PutAsync(remotename, filename, cancelToken);
+            await m_backend.DeleteAsync(remotename, cancelToken);
             ThrowErrorRandom();
         }
-        public void Get(string remotename, string filename)
+
+        public Task TestAsync(CancellationToken cancelToken)
         {
-            ThrowErrorRandom();
-            m_backend.Get(remotename, filename);
-            ThrowErrorRandom();
+            return m_backend.TestAsync(cancelToken);
         }
-        public void Delete(string remotename)
+
+        public Task CreateFolderAsync(CancellationToken cancelToken)
         {
-            ThrowErrorRandom();
-            m_backend.Delete(remotename);
-            ThrowErrorRandom();
-        }
-        public void Test()
-        {
-            m_backend.Test();
-        }
-        public void CreateFolder()
-        {
-            m_backend.CreateFolder();
+            return m_backend.CreateFolderAsync(cancelToken);
         }
         public string[] DNSName
         {
@@ -135,6 +126,7 @@ namespace Duplicati.UnitTest
                 return "A testing backend that randomly fails";
             }
         }
+
         #endregion
         #region IDisposable implementation
         public void Dispose()

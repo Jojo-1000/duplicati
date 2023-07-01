@@ -102,7 +102,7 @@ namespace Duplicati.CommandLine.BackendTool
                             throw new UserInformationException(string.Format("too many arguments: {0}", string.Join(",", args)), "BackendToolTooManyArguments");
                         Console.WriteLine("{0}\t{1}\t{2}\t{3}", "Name", "Dir/File", "LastChange", "Size");
                     
-                        foreach(var e in backend.List())
+                        foreach(var e in backend.ListAsync(CancellationToken.None).Result)
                             Console.WriteLine("{0}\t{1}\t{2}\t{3}", e.Name, e.IsFolder ? "Dir" : "File", e.LastModification, e.Size < 0 ? "" : Library.Utility.Utility.FormatSizeString(e.Size));
 
                         return 0;
@@ -112,7 +112,7 @@ namespace Duplicati.CommandLine.BackendTool
                         if (args.Count != 2)
                             throw new UserInformationException(string.Format("too many arguments: {0}", string.Join(",", args)), "BackendToolTooManyArguments");
 
-                        backend.CreateFolder();
+                        backend.CreateFolderAsync(CancellationToken.None).Wait();
                         
                         return 0;
                     }
@@ -122,7 +122,7 @@ namespace Duplicati.CommandLine.BackendTool
                             throw new UserInformationException("DELETE requires a filename argument", "BackendToolDeleteRequiresAnArgument");
                         if (args.Count > 3)
                             throw new Exception(string.Format("too many arguments: {0}", string.Join(",", args)));
-                        backend.Delete(Path.GetFileName(args[2]));
+                        backend.DeleteAsync(Path.GetFileName(args[2]), CancellationToken.None).Wait();
                         
                         return 0;
                     }
@@ -134,7 +134,9 @@ namespace Duplicati.CommandLine.BackendTool
                             throw new UserInformationException(string.Format("too many arguments: {0}", string.Join(",", args)), "BackendToolTooManyArguments");
                         if (File.Exists(args[2]))
                             throw new UserInformationException("File already exists, not overwriting!", "BackendToolFileAlreadyExists");
-                        backend.Get(Path.GetFileName(args[2]), args[2]);
+                        // TODO: Use FauxStream if not supported
+                        using(var fs = System.IO.File.OpenWrite(args[2]))
+                            backend.GetAsync(Path.GetFileName(args[2]), fs, CancellationToken.None).Wait();
                         
                         return 0;
                     }
@@ -144,8 +146,9 @@ namespace Duplicati.CommandLine.BackendTool
                             throw new UserInformationException("PUT requires a filename argument","BackendToolPutRequiresAndArgument");
                         if (args.Count > 3)
                             throw new UserInformationException(string.Format("too many arguments: {0}", string.Join(",", args)), "BackendToolTooManyArguments");
-                           
-                        backend.PutAsync(Path.GetFileName(args[2]), args[2], CancellationToken.None).Wait();
+                        // TODO: Use FauxStream if not supported
+                        using (var fs = System.IO.File.OpenRead(args[2]))
+                            backend.PutAsync(Path.GetFileName(args[2]), fs, CancellationToken.None).Wait();
                         
                         return 0;
                     }

@@ -171,13 +171,15 @@ namespace Duplicati.CommandLine.BackendTester
                     loadedModules.Add(m);
                 }
 
+            CancellationToken token = CancellationToken.None;
+
             try
             {
                 IEnumerable<Library.Interface.IFileEntry> curlist = null;
                 try
                 {
-                    backend.Test();
-                    curlist = backend.List();
+                    backend.TestAsync(token).Wait();
+                    curlist = backend.ListAsync(token).Result;
                 }
                 catch (FolderMissingException)
                 {
@@ -185,8 +187,8 @@ namespace Duplicati.CommandLine.BackendTester
                     {
                         try
                         {
-                            backend.CreateFolder();
-                            curlist = backend.List();
+                            backend.CreateFolderAsync(token).Wait();
+                            curlist = backend.ListAsync(token).Result;
                         }
                         catch (Exception ex)
                         {
@@ -205,7 +207,7 @@ namespace Duplicati.CommandLine.BackendTester
                             if (Library.Utility.Utility.ParseBoolOption(options, "force"))
                             {
                                 Console.WriteLine("Auto clean, removing file: {0}", fe.Name);
-                                backend.Delete(fe.Name);
+                                backend.DeleteAsync(fe.Name, token).Wait();
                                 continue;
                             }
                             else
@@ -228,7 +230,7 @@ namespace Duplicati.CommandLine.BackendTester
                 long throttleUpload = 0;
                 if (options.TryGetValue("throttle-upload", out string throttleUploadString))
                 {
-                    if (!(backend is IStreamingBackend) || disableStreaming)
+                    if (!backend.SupportsStreaming || disableStreaming)
                     {
                         Console.WriteLine("Warning: Throttling is only supported in this tool on streaming backends");
                     }
@@ -239,7 +241,7 @@ namespace Duplicati.CommandLine.BackendTester
                 long throttleDownload = 0;
                 if (options.TryGetValue("throttle-download", out string throttleDownloadString))
                 {
-                    if (!(backend is IStreamingBackend) || disableStreaming)
+                    if (!backend.SupportsStreaming || disableStreaming)
                     {
                         Console.WriteLine("Warning: Throttling is only supported in this tool on streaming backends");
                     }
@@ -319,7 +321,7 @@ namespace Duplicati.CommandLine.BackendTester
 
                     Console.WriteLine("Verifying file list ...");
 
-                    curlist = backend.List();
+                    curlist = backend.ListAsync(token).Result;
                     foreach (Library.Interface.IFileEntry fe in curlist)
                         if (!fe.IsFolder)
                         {
@@ -364,15 +366,19 @@ namespace Duplicati.CommandLine.BackendTester
 
                             try
                             {
-                                if (backend is IStreamingBackend streamingBackend && !disableStreaming)
+                                if (backend.SupportsStreaming && !disableStreaming)
                                 {
                                     using (System.IO.FileStream fs = new System.IO.FileStream(cf, System.IO.FileMode.Create, System.IO.FileAccess.Write, System.IO.FileShare.None))
                                     using (Library.Utility.ThrottledStream ts = new Library.Utility.ThrottledStream(fs, throttleDownload, throttleDownload))
                                     using (NonSeekableStream nss = new NonSeekableStream(ts))
-                                        streamingBackend.Get(files[i].remotefilename, nss);
+                                        backend.GetAsync(files[i].remotefilename, nss, token).Wait();
                                 }
                                 else
-                                    backend.Get(files[i].remotefilename, cf);
+                                {
+                                    // TODO: Use FauxStream?
+                                    using (System.IO.FileStream fs = new System.IO.FileStream(cf, System.IO.FileMode.Create, System.IO.FileAccess.Write, System.IO.FileShare.None))
+                                        backend.GetAsync(files[i].remotefilename, fs, token).Wait();
+                                }
 
                                 e = null;
                             }
@@ -404,13 +410,13 @@ namespace Duplicati.CommandLine.BackendTester
                     Console.WriteLine("Deleting files...");
 
                     foreach (TempFile tx in files)
-                        try { backend.Delete(tx.remotefilename); }
+                        try { backend.DeleteAsync(tx.remotefilename, token).Wait(); }
                         catch (Exception ex)
                         {
                             Console.WriteLine("*** Failed to delete file {0}, message: {1}", tx.remotefilename, ex);
                         }
 
-                    curlist = backend.List();
+                    curlist = backend.ListAsync(token).Result;
                     foreach (Library.Interface.IFileEntry fe in curlist)
                         if (!fe.IsFolder)
                         {
@@ -423,8 +429,9 @@ namespace Duplicati.CommandLine.BackendTester
                     try
                     {
                         using (Duplicati.Library.Utility.TempFile tempFile = new Duplicati.Library.Utility.TempFile())
+                        using(var fs = System.IO.File.OpenRead(tempFile.Name))
                         {
-                            backend.Get(string.Format("NonExistentFile-{0}", Guid.NewGuid()), tempFile.Name);
+                            backend.GetAsync(string.Format("NonExistentFile-{0}", Guid.NewGuid()), fs, token).Wait();
                         }
                     }
                     catch (FileMissingException)
@@ -514,15 +521,19 @@ namespace Duplicati.CommandLine.BackendTester
 
             try
             {
-                if (backend is IStreamingBackend streamingBackend && !disableStreaming)
+                if (backend.SupportsStreaming && !disableStreaming)
                 {
                     using (System.IO.FileStream fs = new System.IO.FileStream(localfilename, System.IO.FileMode.Open, System.IO.FileAccess.Read, System.IO.FileShare.Read))
                     using (Library.Utility.ThrottledStream ts = new Library.Utility.ThrottledStream(fs, throttle, throttle))
                     using (NonSeekableStream nss = new NonSeekableStream(ts))
-                        streamingBackend.PutAsync(remotefilename, nss, CancellationToken.None).Wait();
+                        backend.PutAsync(remotefilename, nss, CancellationToken.None).Wait();
                 }
                 else
-                    backend.PutAsync(remotefilename, localfilename, CancellationToken.None).Wait();
+                {
+                    // TODO: Use FauxStream?
+                    using (System.IO.FileStream fs = new System.IO.FileStream(localfilename, System.IO.FileMode.Open, System.IO.FileAccess.Read, System.IO.FileShare.Read))
+                        backend.PutAsync(remotefilename, fs, CancellationToken.None).Wait();
+                }
 
                 e = null;
             }

@@ -348,7 +348,7 @@ namespace Duplicati.Library.Main.Operation.Backup
                         try
                         {
                             // If we successfully create the folder, we can re-use the connection
-                            worker.Backend.CreateFolder();
+                            await worker.Backend.CreateFolderAsync(cancelToken).ConfigureAwait(false);
                             recovered = true;
                         }
                         catch (Exception dex)
@@ -425,16 +425,18 @@ namespace Duplicati.Library.Main.Operation.Backup
 
             var begin = DateTime.Now;
 
-            if (!m_options.DisableStreamingTransfers && backend is IStreamingBackend streamingBackend)
+            if (!m_options.DisableStreamingTransfers && backend.SupportsStreaming)
             {
                 // A download throttle speed is not given to the ThrottledStream as we are only uploading data here
                 using (var fs = File.OpenRead(item.LocalFilename))
                 using (var ts = new ThrottledStream(fs, m_initialUploadThrottleSpeed, 0))
                 using (var pgs = new ProgressReportingStream(ts, pg => HandleProgress(ts, pg, item.RemoteFilename)))
-                    await streamingBackend.PutAsync(item.RemoteFilename, pgs, cancelToken).ConfigureAwait(false);
+                    await backend.PutAsync(item.RemoteFilename, pgs, cancelToken).ConfigureAwait(false);
             }
             else
-                await backend.PutAsync(item.RemoteFilename, item.LocalFilename, cancelToken).ConfigureAwait(false);
+                // TODO: Use FauxStream?
+                using (var fs = File.OpenRead(item.LocalFilename))
+                    await backend.PutAsync(item.RemoteFilename, fs, cancelToken).ConfigureAwait(false);
 
             var duration = DateTime.Now - begin;
             m_progressUpdater.EndFileProgress(item.RemoteFilename);
@@ -447,7 +449,8 @@ namespace Duplicati.Library.Main.Operation.Backup
 
             if (m_options.ListVerifyUploads)
             {
-                var f = backend.List().FirstOrDefault(n => n.Name.Equals(item.RemoteFilename, StringComparison.OrdinalIgnoreCase));
+                var f = (await backend.ListAsync(cancelToken).ConfigureAwait(false))
+                    .FirstOrDefault(n => n.Name.Equals(item.RemoteFilename, StringComparison.OrdinalIgnoreCase));
                 if (f == null)
                     throw new Exception(string.Format("List verify failed, file was not found after upload: {0}", item.RemoteFilename));
                 else if (f.Size != item.Size && f.Size >= 0)

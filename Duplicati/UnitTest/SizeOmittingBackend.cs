@@ -24,13 +24,13 @@ using System.Threading.Tasks;
 
 namespace Duplicati.UnitTest
 {
-    public class SizeOmittingBackend : IBackend, IStreamingBackend
+    public class SizeOmittingBackend : IBackend
     {
         static SizeOmittingBackend() { WrappedBackend = "file"; }
 
         public static string WrappedBackend { get; set; }
 
-        private IStreamingBackend m_backend;
+        private IBackend m_backend;
         public SizeOmittingBackend()
         {
         }
@@ -39,48 +39,43 @@ namespace Duplicati.UnitTest
         public SizeOmittingBackend(string url, Dictionary<string, string> options)
         {
             var u = new Library.Utility.Uri(url).SetScheme(WrappedBackend).ToString();
-            m_backend = (IStreamingBackend)Library.DynamicLoader.BackendLoader.GetBackend(u, options);
+            m_backend = Library.DynamicLoader.BackendLoader.GetBackend(u, options);
         }
-
-        #region IStreamingBackend implementation
-        public Task PutAsync(string remotename, Stream stream, CancellationToken cancelToken)
-        {
-            return m_backend.PutAsync(remotename, stream, cancelToken);
-        }
-        public void Get(string remotename, Stream stream)
-        {
-            m_backend.Get(remotename, stream);
-        }
-        #endregion
 
         #region IBackend implementation
-        public IEnumerable<IFileEntry> List()
+        public async Task<IList<IFileEntry>> ListAsync(CancellationToken cancelToken)
         {
             return
-                from n in m_backend.List()
+                (from n in (await m_backend.ListAsync(cancelToken))
                 where !n.IsFolder
-                select new FileEntry(n.Name);
+                select (IFileEntry)new FileEntry(n.Name)).ToList();
         }
-        public Task PutAsync(string remotename, string filename, CancellationToken cancelToken)
+
+        public Task PutAsync(string remotename, Stream source, CancellationToken cancelToken)
         {
-            return m_backend.PutAsync(remotename, filename, cancelToken);
+            return m_backend.PutAsync(remotename, source, cancelToken);
         }
-        public void Get(string remotename, string filename)
+
+        public Task GetAsync(string remotename, Stream destination, CancellationToken cancelToken)
         {
-            m_backend.Get(remotename, filename);
+            return m_backend.GetAsync(remotename, destination, cancelToken);
         }
-        public void Delete(string remotename)
+
+        public Task DeleteAsync(string remotename, CancellationToken cancelToken)
         {
-            m_backend.Delete(remotename);
+            return m_backend.DeleteAsync(remotename, cancelToken);
         }
-        public void Test()
+
+        public Task TestAsync(CancellationToken cancelToken)
         {
-            m_backend.Test();
+            return m_backend.TestAsync(cancelToken);
         }
-        public void CreateFolder()
+
+        public Task CreateFolderAsync(CancellationToken cancelToken)
         {
-            m_backend.CreateFolder();
+            return m_backend.CreateFolderAsync(cancelToken);
         }
+        public bool SupportsStreaming => true;
         public string[] DNSName
         {
             get
@@ -120,6 +115,7 @@ namespace Duplicati.UnitTest
                 return "A testing backend that does not return size information";
             }
         }
+
         #endregion
         #region IDisposable implementation
         public void Dispose()

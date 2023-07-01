@@ -32,6 +32,7 @@ namespace Duplicati.CommandLine.RecoveryTool
 
             var m_Options = new Options(options);
 
+            CancellationToken cancelToken = CancellationToken.None;
             using (var backend = Library.DynamicLoader.BackendLoader.GetBackend(args[2], options))
             {
                 if (backend == null)
@@ -50,7 +51,7 @@ namespace Duplicati.CommandLine.RecoveryTool
 
                 Console.WriteLine("Listing files on backend: {0} ...", backend.ProtocolKey);
 
-                var rawlist = backend.List().ToList();
+                var rawlist = backend.ListAsync(cancelToken).Result.ToList();
 
                 Console.WriteLine("Found {0} files at remote storage", rawlist.Count);
 
@@ -151,7 +152,9 @@ namespace Duplicati.CommandLine.RecoveryTool
 
                         using (var tf = new TempFile())
                         {
-                            backend.Get(remoteFile.File.Name, tf);
+                            // TODO: Use FauxStream if not supported
+                            using (var fs = File.OpenWrite(tf))
+                                backend.GetAsync(remoteFile.File.Name, fs, cancelToken).Wait();
                             originLastWriteTime = new FileInfo(tf).LastWriteTime;
                             downloaded++;
 
@@ -254,8 +257,10 @@ namespace Duplicati.CommandLine.RecoveryTool
                         if (reupload)
                         {
                             Console.Write(" reuploading ...");
-                            backend.PutAsync((new FileInfo(localFileTarget)).Name, localFileTarget, CancellationToken.None).Wait();
-                            backend.Delete(remoteFile.File.Name);
+                            // TODO: Use FauxStream if not supported
+                            using (var fs = File.OpenWrite(localFileTarget))
+                                backend.PutAsync((new FileInfo(localFileTarget)).Name, fs, CancellationToken.None).Wait();
+                            backend.DeleteAsync(remoteFile.File.Name, cancelToken).Wait();
                             File.Delete(localFileTarget);
                         }
 
@@ -276,7 +281,7 @@ namespace Duplicati.CommandLine.RecoveryTool
                     if (remoteverificationfileexist)
                     {
                         Console.WriteLine("Found verification file {0} - deleting", m_Options.Prefix + "-verification.json");
-                        backend.Delete(m_Options.Prefix + "-verification.json");
+                        backend.DeleteAsync(m_Options.Prefix + "-verification.json", cancelToken).Wait();
                     }
                 }
 

@@ -10,6 +10,7 @@ using Newtonsoft.Json;
 using Duplicati.Library.Localization.Short;
 using System.Threading;
 using System.Net;
+using System.Threading.Tasks;
 
 namespace Duplicati.Library.Main
 {
@@ -358,6 +359,7 @@ namespace Duplicati.Library.Main
         private System.Threading.Thread m_thread;
         private readonly BasicResults m_taskControl;
         private readonly DatabaseCollector m_db;
+        private readonly CancellationToken m_token;
 
         // Cache these
         private readonly int m_numberofretries;
@@ -375,6 +377,8 @@ namespace Duplicati.Library.Main
             m_numberofretries = options.NumberOfRetries;
             m_retrydelay = options.RetryDelay;
             m_retrywithexponentialbackoff = options.RetryWithExponentialBackoff;
+            // TODO: Pass cancellation token
+            m_token = CancellationToken.None;
 
             m_db = new DatabaseCollector(database);
 
@@ -546,7 +550,7 @@ namespace Duplicati.Library.Main
                                 try
                                 {
                                     // If we successfully create the folder, we can re-use the connection
-                                    m_backend.CreateFolder();
+                                    m_backend.CreateFolderAsync(m_token).Wait();
                                     recovered = true;
                                 }
                                 catch (Exception dex)
@@ -590,7 +594,7 @@ namespace Duplicati.Library.Main
                         Logging.Log.WriteInformationMessage(LOGTAG, "DeleteFileFailed", LC.L("Failed to delete file {0}, testing if file exists", item.RemoteFilename));
                         try
                         {
-                            if (!m_backend.List().Select(x => x.Name).Contains(item.RemoteFilename))
+                            if (!m_backend.ListAsync(m_token).Result.Select(x => x.Name).Contains(item.RemoteFilename))
                             {
                                 lastException = null;
                                 Logging.Log.WriteInformationMessage(LOGTAG, "DeleteFileFailureRecovered", LC.L("Recovered from problem with attempting to delete non-existing file {0}", item.RemoteFilename));
@@ -725,15 +729,19 @@ namespace Duplicati.Library.Main
 
             var begin = DateTime.Now;
 
-            if (m_backend is Library.Interface.IStreamingBackend && !m_options.DisableStreamingTransfers)
+            if (m_backend.SupportsStreaming && !m_options.DisableStreamingTransfers)
             {
                 using (var fs = System.IO.File.OpenRead(item.LocalFilename))
                 using (var ts = new ThrottledStream(fs, m_options.MaxUploadPrSecond, 0))
                 using (var pgs = new Library.Utility.ProgressReportingStream(ts, pg => HandleProgress(ts, pg)))
-                    ((Library.Interface.IStreamingBackend)m_backend).PutAsync(item.RemoteFilename, pgs, CancellationToken.None).Wait();
+                    m_backend.PutAsync(item.RemoteFilename, pgs, m_token).Wait();
             }
             else
-                m_backend.PutAsync(item.RemoteFilename, item.LocalFilename, CancellationToken.None).Wait();
+            {
+                // TODO: Use FauxStream?
+                using (var fs = System.IO.File.OpenRead(item.LocalFilename))
+                    m_backend.PutAsync(item.RemoteFilename, fs, m_token).Wait();
+            }
 
             var duration = DateTime.Now - begin;
             Logging.Log.WriteProfilingMessage(LOGTAG, "UploadSpeed", "Uploaded {0} in {1}, {2}/s", Library.Utility.Utility.FormatSizeString(item.Size), duration, Library.Utility.Utility.FormatSizeString((long)(item.Size / duration.TotalSeconds)));
@@ -745,7 +753,7 @@ namespace Duplicati.Library.Main
 
             if (m_options.ListVerifyUploads)
             {
-                var f = m_backend.List().FirstOrDefault(n => n.Name.Equals(item.RemoteFilename, StringComparison.OrdinalIgnoreCase));
+                var f = m_backend.ListAsync(m_token).Result.FirstOrDefault(n => n.Name.Equals(item.RemoteFilename, StringComparison.OrdinalIgnoreCase));
                 if (f == null)
                     throw new Exception(string.Format("List verify failed, file was not found after upload: {0}", item.RemoteFilename));
                 else if (f.Size != item.Size && f.Size >= 0)
@@ -765,7 +773,7 @@ namespace Duplicati.Library.Main
             retDownloadSize = -1;
             retHashcode = null;
 
-            bool enableStreaming = (m_backend is Library.Interface.IStreamingBackend && !m_options.DisableStreamingTransfers);
+            bool enableStreaming = (m_backend.SupportsStreaming && !m_options.DisableStreamingTransfers);
 
             System.Threading.Tasks.Task<string> taskHasher = null;
             DirectStreamLink linkForkHasher = null;
@@ -827,14 +835,15 @@ namespace Duplicati.Library.Main
                             {
                                 taskHasher.Start(); // We do not start tasks earlier to be sure the input always gets closed. 
                                 if (taskDecrypter != null) taskDecrypter.Start();
-                                ((Library.Interface.IStreamingBackend)m_backend).Get(item.RemoteFilename, pgs);
+                                    m_backend.GetAsync(item.RemoteFilename, pgs, m_token).Wait();
                             }
                             retDownloadSize = ss.TotalBytesWritten;
                         }
                     }
                     else
                     {
-                        m_backend.Get(item.RemoteFilename, dlTarget);
+                        using (dlToStream = System.IO.File.OpenRead(dlTarget))
+                            m_backend.GetAsync(item.RemoteFilename, dlToStream, m_token).Wait();
                         retDownloadSize = new System.IO.FileInfo(dlTarget).Length;
                         using (dlToStream = System.IO.File.OpenRead(dlTarget))
                         {
@@ -900,7 +909,7 @@ namespace Duplicati.Library.Main
             try
             {
                 dlTarget = new Library.Utility.TempFile();
-                if (m_backend is Library.Interface.IStreamingBackend && !m_options.DisableStreamingTransfers)
+                if (m_backend.SupportsStreaming && !m_options.DisableStreamingTransfers)
                 {
                     // extended to use stacked streams
                     using (var fs = System.IO.File.OpenWrite(dlTarget))
@@ -910,7 +919,7 @@ namespace Duplicati.Library.Main
                     {
                         using (var ts = new ThrottledStream(ss, 0, m_options.MaxDownloadPrSecond))
                         using (var pgs = new Library.Utility.ProgressReportingStream(ts, pg => HandleProgress(ts, pg)))
-                        { ((Library.Interface.IStreamingBackend)m_backend).Get(item.RemoteFilename, pgs); }
+                        { m_backend.GetAsync(item.RemoteFilename, pgs, m_token).Wait(); }
                         ss.Flush();
                         retDownloadSize = ss.TotalBytesWritten;
                         retHashcode = getFileHash();
@@ -918,7 +927,9 @@ namespace Duplicati.Library.Main
                 }
                 else
                 {
-                    m_backend.Get(item.RemoteFilename, dlTarget);
+                    // TODO: Use FauxStream?
+                    using (var fs = System.IO.File.OpenWrite(dlTarget))
+                        m_backend.GetAsync(item.RemoteFilename, fs, m_token).Wait();
                     retDownloadSize = new System.IO.FileInfo(dlTarget).Length;
                     retHashcode = CalculateFileHash(dlTarget);
                 }
@@ -1063,7 +1074,7 @@ namespace Duplicati.Library.Main
         {
             m_statwriter.SendEvent(BackendActionType.List, BackendEventType.Started, null, -1);
 
-            var r = m_backend.List().ToList();
+            var r = m_backend.ListAsync(m_token).Result.ToList();
 
             StringBuilder sb = new StringBuilder();
             sb.AppendLine("[");
@@ -1091,7 +1102,7 @@ namespace Duplicati.Library.Main
             string result = null;
             try
             {
-                m_backend.Delete(item.RemoteFilename);
+                m_backend.DeleteAsync(item.RemoteFilename, m_token).Wait();
             }
             catch (Exception ex)
             {
@@ -1105,7 +1116,7 @@ namespace Duplicati.Library.Main
 
                     try
                     {
-                        success = !m_backend.List().Select(x => x.Name).Contains(item.RemoteFilename);
+                        success = !m_backend.ListAsync(m_token).Result.Select(x => x.Name).Contains(item.RemoteFilename);
                     }
                     catch
                     {
@@ -1141,7 +1152,7 @@ namespace Duplicati.Library.Main
             string result = null;
             try
             {
-                m_backend.CreateFolder();
+                m_backend.CreateFolderAsync(m_token).Wait();
             }
             catch (Exception ex)
             {

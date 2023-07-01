@@ -31,7 +31,8 @@ namespace Duplicati.CommandLine.RecoveryTool
                 return 100;
             }
 
-            using(var backend = Library.DynamicLoader.BackendLoader.GetBackend(args[1], options))
+            System.Threading.CancellationToken token = System.Threading.CancellationToken.None;
+            using (var backend = Library.DynamicLoader.BackendLoader.GetBackend(args[1], options))
             {
                 if (backend == null)
                 {
@@ -49,7 +50,7 @@ namespace Duplicati.CommandLine.RecoveryTool
 
                 Console.WriteLine("Listing files on backend: {0} ...", backend.ProtocolKey);
 
-                var lst = backend.List().ToList();
+                var lst = backend.ListAsync(token).Result.ToList();
 
                 Console.WriteLine("Found {0} files", lst.Count);
 
@@ -101,7 +102,9 @@ namespace Duplicati.CommandLine.RecoveryTool
 
                         using(var tf = new Library.Utility.TempFile())
                         {
-                            backend.Get(file.Name, tf);
+                            // TODO: Use FauxStream if not supported
+                            using (var fs = System.IO.File.OpenWrite(tf))
+                                backend.GetAsync(file.Name, fs, token).Wait();
 
                             if (p.EncryptionModule != null)
                             {
