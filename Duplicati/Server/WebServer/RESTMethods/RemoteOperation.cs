@@ -14,6 +14,7 @@
 //  You should have received a copy of the GNU Lesser General Public
 //  License along with this library; if not, write to the Free Software
 //  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+using Duplicati.Library.Common.IO;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -51,8 +52,7 @@ namespace Duplicati.Server.WebServer.RESTMethods
                 using(var tf = new Library.Utility.TempFile())
                 {
                     System.IO.File.WriteAllText(tf, data);
-                    // TODO: Use FauxStream if not supported
-                    using (var fs = System.IO.File.OpenWrite(tf))
+                    using (var fs = FauxStream.OpenSupported(b.SupportsStreaming, tf, System.IO.FileAccess.Read))
                         b.PutAsync(remotename, fs, CancellationToken.None).Wait();
                 }
             }

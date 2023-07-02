@@ -15,6 +15,7 @@
 //  License along with this library; if not, write to the Free Software
 //  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 using CoCoL;
+using Duplicati.Library.Common.IO;
 using Duplicati.Library.Interface;
 using Duplicati.Library.Main.Operation.Common;
 using Duplicati.Library.Main.Volumes;
@@ -434,8 +435,7 @@ namespace Duplicati.Library.Main.Operation.Backup
                     await backend.PutAsync(item.RemoteFilename, pgs, cancelToken).ConfigureAwait(false);
             }
             else
-                // TODO: Use FauxStream?
-                using (var fs = File.OpenRead(item.LocalFilename))
+                using (var fs = new FauxStream(item.LocalFilename, FileMode.Open, FileAccess.Read, FileShare.Read))
                     await backend.PutAsync(item.RemoteFilename, fs, cancelToken).ConfigureAwait(false);
 
             var duration = DateTime.Now - begin;

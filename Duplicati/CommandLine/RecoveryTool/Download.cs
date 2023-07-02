@@ -18,6 +18,7 @@ using System;
 using System.IO;
 using System.Collections.Generic;
 using System.Linq;
+using Duplicati.Library.Common.IO;
 
 namespace Duplicati.CommandLine.RecoveryTool
 {
@@ -102,8 +103,7 @@ namespace Duplicati.CommandLine.RecoveryTool
 
                         using(var tf = new Library.Utility.TempFile())
                         {
-                            // TODO: Use FauxStream if not supported
-                            using (var fs = System.IO.File.OpenWrite(tf))
+                            using (var fs = FauxStream.OpenSupported(backend.SupportsStreaming, tf, FileAccess.Write))
                                 backend.GetAsync(file.Name, fs, token).Wait();
 
                             if (p.EncryptionModule != null)

@@ -24,6 +24,7 @@ using Duplicati.Library.Interface;
 using System.Linq;
 using System.Globalization;
 using System.Threading;
+using Duplicati.Library.Common.IO;
 
 namespace Duplicati.CommandLine.BackendTester
 {
@@ -375,8 +376,7 @@ namespace Duplicati.CommandLine.BackendTester
                                 }
                                 else
                                 {
-                                    // TODO: Use FauxStream?
-                                    using (System.IO.FileStream fs = new System.IO.FileStream(cf, System.IO.FileMode.Create, System.IO.FileAccess.Write, System.IO.FileShare.None))
+                                    using (var fs = new FauxStream(cf, System.IO.FileMode.Create, System.IO.FileAccess.Write, System.IO.FileShare.None))
                                         backend.GetAsync(files[i].remotefilename, fs, token).Wait();
                                 }
 
@@ -530,8 +530,7 @@ namespace Duplicati.CommandLine.BackendTester
                 }
                 else
                 {
-                    // TODO: Use FauxStream?
-                    using (System.IO.FileStream fs = new System.IO.FileStream(localfilename, System.IO.FileMode.Open, System.IO.FileAccess.Read, System.IO.FileShare.Read))
+                    using (var fs = new FauxStream(localfilename, System.IO.FileMode.Open, System.IO.FileAccess.Read, System.IO.FileShare.Read))
                         backend.PutAsync(remotefilename, fs, CancellationToken.None).Wait();
                 }
 

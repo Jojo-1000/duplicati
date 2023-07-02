@@ -20,11 +20,11 @@
     </ProjectReference>
     <ProjectReference Include="..\Library\Backend\AlternativeFTP\Duplicati.Library.Backend.AlternativeFTP.csproj">
     </ProjectReference>
-    <ProjectReference Include="..\Library\Backend\AzureBlob\Duplicati.Library.Backend.AzureBlob.csproj">
-    </ProjectReference>
+    <!--<ProjectReference Include="..\Library\Backend\AzureBlob\Duplicati.Library.Backend.AzureBlob.csproj">
+    </ProjectReference>-->
     <ProjectReference Include="..\Library\Backend\File\Duplicati.Library.Backend.File.csproj">
     </ProjectReference>
-    <ProjectReference Include="..\Library\Backend\CloudFiles\Duplicati.Library.Backend.CloudFiles.csproj">
+    <!--<ProjectReference Include="..\Library\Backend\CloudFiles\Duplicati.Library.Backend.CloudFiles.csproj">
     </ProjectReference>
     <ProjectReference Include="..\Library\Backend\FTP\Duplicati.Library.Backend.FTP.csproj">
     </ProjectReference>
@@ -49,7 +49,7 @@
     <ProjectReference Include="..\Library\Backend\TahoeLAFS\Duplicati.Library.Backend.TahoeLAFS.csproj">
     </ProjectReference>
     <ProjectReference Include="..\Library\Backend\WEBDAV\Duplicati.Library.Backend.WEBDAV.csproj">
-    </ProjectReference>
+    </ProjectReference>-->
     <ProjectReference Include="..\Library\Compression\Duplicati.Library.Compression.csproj">
     </ProjectReference>
     <ProjectReference Include="..\Library\DynamicLoader\Duplicati.Library.DynamicLoader.csproj">
@@ -78,30 +78,30 @@
     </ProjectReference>
     <ProjectReference Include="..\Library\SQLiteHelper\Duplicati.Library.SQLiteHelper.csproj">
     </ProjectReference>
-    <ProjectReference Include="..\Library\Backend\OneDrive\Duplicati.Library.Backend.OneDrive.csproj">
-    </ProjectReference>
+    <!--<ProjectReference Include="..\Library\Backend\OneDrive\Duplicati.Library.Backend.OneDrive.csproj">
+    </ProjectReference>-->
     <ProjectReference Include="..\Library\Localization\Duplicati.Library.Localization.csproj">
     </ProjectReference>
     <ProjectReference Include="..\Library\AutoUpdater\Duplicati.Library.AutoUpdater.csproj">
     </ProjectReference>
-    <ProjectReference Include="..\Library\Backend\GoogleServices\Duplicati.Library.Backend.GoogleServices.csproj">
+    <!--<ProjectReference Include="..\Library\Backend\GoogleServices\Duplicati.Library.Backend.GoogleServices.csproj">
     </ProjectReference>
     <ProjectReference Include="..\Library\Backend\OpenStack\Duplicati.Library.Backend.OpenStack.csproj">
     </ProjectReference>
     <ProjectReference Include="..\Library\Backend\HubiC\Duplicati.Library.Backend.HubiC.csproj">
-    </ProjectReference>
+    </ProjectReference>-->
     <ProjectReference Include="..\CommandLine\RecoveryTool\Duplicati.CommandLine.RecoveryTool.csproj">
     </ProjectReference>
     <ProjectReference Include="..\Library\Backend\Backblaze\Duplicati.Library.Backend.Backblaze.csproj">
     </ProjectReference>
-    <ProjectReference Include="..\Library\Backend\Mega\Duplicati.Library.Backend.Mega.csproj">
+    <!--<ProjectReference Include="..\Library\Backend\Mega\Duplicati.Library.Backend.Mega.csproj">
     </ProjectReference>
     <ProjectReference Include="..\Library\Backend\Box\Duplicati.Library.Backend.Box.csproj">
-    </ProjectReference>
+    </ProjectReference>-->
     <ProjectReference Include="..\Library\UsageReporter\Duplicati.Library.UsageReporter.csproj">
     </ProjectReference>
-    <ProjectReference Include="..\Library\Backend\Dropbox\Duplicati.Library.Backend.Dropbox.csproj">
-    </ProjectReference>
+    <!--<ProjectReference Include="..\Library\Backend\Dropbox\Duplicati.Library.Backend.Dropbox.csproj">
+    </ProjectReference>-->
     <ProjectReference Include="..\Tools\Duplicati.Tools.csproj">
     </ProjectReference>
   </ItemGroup>

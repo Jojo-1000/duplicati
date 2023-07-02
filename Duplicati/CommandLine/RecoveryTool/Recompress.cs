@@ -9,6 +9,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Security.Cryptography;
+using Duplicati.Library.Common.IO;
 
 namespace Duplicati.CommandLine.RecoveryTool
 {
@@ -152,8 +153,7 @@ namespace Duplicati.CommandLine.RecoveryTool
 
                         using (var tf = new TempFile())
                         {
-                            // TODO: Use FauxStream if not supported
-                            using (var fs = File.OpenWrite(tf))
+                            using (var fs = FauxStream.OpenSupported(backend.SupportsStreaming, tf, FileAccess.Write))
                                 backend.GetAsync(remoteFile.File.Name, fs, cancelToken).Wait();
                             originLastWriteTime = new FileInfo(tf).LastWriteTime;
                             downloaded++;
@@ -257,8 +257,7 @@ namespace Duplicati.CommandLine.RecoveryTool
                         if (reupload)
                         {
                             Console.Write(" reuploading ...");
-                            // TODO: Use FauxStream if not supported
-                            using (var fs = File.OpenWrite(localFileTarget))
+                            using (var fs = FauxStream.OpenSupported(backend.SupportsStreaming, localFileTarget, FileAccess.Read))
                                 backend.PutAsync((new FileInfo(localFileTarget)).Name, fs, CancellationToken.None).Wait();
                             backend.DeleteAsync(remoteFile.File.Name, cancelToken).Wait();
                             File.Delete(localFileTarget);

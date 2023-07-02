@@ -209,8 +209,8 @@ namespace Duplicati.Library.Backend.File
         {
             if (SupportsStreaming)
             {
-                using (var writestream = systemIO.FileOpenWrite(GetRemoteName(remotename)))
-                    await Utility.Utility.CopyStreamAsync(stream, writestream, true, cancelToken, m_copybuffer);
+                using (var writestream = systemIO.FileOpenWrite(GetRemoteName(targetFilename)))
+                    await Utility.Utility.CopyStreamAsync(sourceStream, writestream, true, cancelToken, m_copybuffer);
             }
             else
             {
@@ -382,7 +382,7 @@ namespace Duplicati.Library.Backend.File
             get { return null; }
         }
 
-        public bool SupportsStreaming => !(m_no_streaming || m_moveFile);
+        public bool SupportsStreaming => !m_moveFile;
 
         public void Rename(string oldname, string newname)
         {

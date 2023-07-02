@@ -11,9 +11,9 @@
   <ItemGroup>	
     <ProjectReference Include="..\..\Library\Backend\AzureBlob\Duplicati.Library.Backend.AzureBlob.csproj">
     </ProjectReference>
-    <!--<ProjectReference Include="..\..\Library\Backend\File\Duplicati.Library.Backend.File.csproj">
+    <ProjectReference Include="..\..\Library\Backend\File\Duplicati.Library.Backend.File.csproj">
     </ProjectReference>
-    <ProjectReference Include="..\..\Library\Backend\Jottacloud\Duplicati.Library.Backend.Jottacloud.csproj">
+    <!--<ProjectReference Include="..\..\Library\Backend\Jottacloud\Duplicati.Library.Backend.Jottacloud.csproj">
     </ProjectReference>
     <ProjectReference Include="..\..\Library\Backend\Rclone\Duplicati.Library.Backend.Rclone.csproj">
     </ProjectReference>

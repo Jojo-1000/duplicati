@@ -17,6 +17,7 @@
 // Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 // 
 #endregion
+using Duplicati.Library.Common.IO;
 using Duplicati.Library.Interface;
 using System;
 using System.Collections.Generic;
@@ -134,8 +135,7 @@ namespace Duplicati.CommandLine.BackendTool
                             throw new UserInformationException(string.Format("too many arguments: {0}", string.Join(",", args)), "BackendToolTooManyArguments");
                         if (File.Exists(args[2]))
                             throw new UserInformationException("File already exists, not overwriting!", "BackendToolFileAlreadyExists");
-                        // TODO: Use FauxStream if not supported
-                        using(var fs = System.IO.File.OpenWrite(args[2]))
+                        using(var fs = FauxStream.OpenSupported(backend.SupportsStreaming, args[2], FileAccess.Write))
                             backend.GetAsync(Path.GetFileName(args[2]), fs, CancellationToken.None).Wait();
                         
                         return 0;
@@ -146,8 +146,7 @@ namespace Duplicati.CommandLine.BackendTool
                             throw new UserInformationException("PUT requires a filename argument","BackendToolPutRequiresAndArgument");
                         if (args.Count > 3)
                             throw new UserInformationException(string.Format("too many arguments: {0}", string.Join(",", args)), "BackendToolTooManyArguments");
-                        // TODO: Use FauxStream if not supported
-                        using (var fs = System.IO.File.OpenRead(args[2]))
+                        using (var fs = FauxStream.OpenSupported(backend.SupportsStreaming, args[2], FileAccess.Read))
                             backend.PutAsync(Path.GetFileName(args[2]), fs, CancellationToken.None).Wait();
                         
                         return 0;

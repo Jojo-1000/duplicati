@@ -11,6 +11,8 @@ using Duplicati.Library.Localization.Short;
 using System.Threading;
 using System.Net;
 using System.Threading.Tasks;
+using System.IO;
+using Duplicati.Library.Common.IO;
 
 namespace Duplicati.Library.Main
 {
@@ -738,8 +740,7 @@ namespace Duplicati.Library.Main
             }
             else
             {
-                // TODO: Use FauxStream?
-                using (var fs = System.IO.File.OpenRead(item.LocalFilename))
+                using (var fs = new FauxStream(item.LocalFilename, FileMode.Open, FileAccess.Read, FileShare.Read))
                     m_backend.PutAsync(item.RemoteFilename, fs, m_token).Wait();
             }
 
@@ -927,8 +928,7 @@ namespace Duplicati.Library.Main
                 }
                 else
                 {
-                    // TODO: Use FauxStream?
-                    using (var fs = System.IO.File.OpenWrite(dlTarget))
+                    using (var fs = new FauxStream(dlTarget, FileMode.OpenOrCreate, FileAccess.Write, FileShare.None))
                         m_backend.GetAsync(item.RemoteFilename, fs, m_token).Wait();
                     retDownloadSize = new System.IO.FileInfo(dlTarget).Length;
                     retHashcode = CalculateFileHash(dlTarget);

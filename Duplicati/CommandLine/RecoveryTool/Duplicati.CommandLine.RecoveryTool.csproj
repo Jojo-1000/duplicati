@@ -14,10 +14,10 @@
     <!--<ProjectReference Include="..\..\Library\Backend\AzureBlob\Duplicati.Library.Backend.AzureBlob.csproj">
     </ProjectReference>
     <ProjectReference Include="..\..\Library\Backend\CloudFiles\Duplicati.Library.Backend.CloudFiles.csproj">
-    </ProjectReference>
+    </ProjectReference>-->
     <ProjectReference Include="..\..\Library\Backend\File\Duplicati.Library.Backend.File.csproj">
     </ProjectReference>
-    <ProjectReference Include="..\..\Library\Backend\FTP\Duplicati.Library.Backend.FTP.csproj">
+    <!--<ProjectReference Include="..\..\Library\Backend\FTP\Duplicati.Library.Backend.FTP.csproj">
     </ProjectReference>
     <ProjectReference Include="..\..\Library\Backend\GoogleServices\Duplicati.Library.Backend.GoogleServices.csproj">
     </ProjectReference>
