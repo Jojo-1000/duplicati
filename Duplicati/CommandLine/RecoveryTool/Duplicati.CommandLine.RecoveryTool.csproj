@@ -11,7 +11,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\Library\AutoUpdater\Duplicati.Library.AutoUpdater.csproj">
     </ProjectReference>
-    <ProjectReference Include="..\..\Library\Backend\AzureBlob\Duplicati.Library.Backend.AzureBlob.csproj">
+    <!--<ProjectReference Include="..\..\Library\Backend\AzureBlob\Duplicati.Library.Backend.AzureBlob.csproj">
     </ProjectReference>
     <ProjectReference Include="..\..\Library\Backend\CloudFiles\Duplicati.Library.Backend.CloudFiles.csproj">
     </ProjectReference>
@@ -45,7 +45,7 @@
     </ProjectReference>
     <ProjectReference Include="..\..\Library\Backend\Tardigrade\Duplicati.Library.Backend.Tardigrade.csproj">    </ProjectReference>
     <ProjectReference Include="..\..\Library\Backend\WEBDAV\Duplicati.Library.Backend.WEBDAV.csproj">
-    </ProjectReference>
+    </ProjectReference>-->
     <ProjectReference Include="..\..\Library\Compression\Duplicati.Library.Compression.csproj">
     </ProjectReference>
     <ProjectReference Include="..\..\Library\DynamicLoader\Duplicati.Library.DynamicLoader.csproj">
@@ -60,16 +60,16 @@
     </ProjectReference>
     <ProjectReference Include="..\..\Library\Backend\Backblaze\Duplicati.Library.Backend.Backblaze.csproj">
     </ProjectReference>
-    <ProjectReference Include="..\..\Library\Backend\Mega\Duplicati.Library.Backend.Mega.csproj">
+    <!--<ProjectReference Include="..\..\Library\Backend\Mega\Duplicati.Library.Backend.Mega.csproj">
     </ProjectReference>
     <ProjectReference Include="..\..\Library\Backend\Box\Duplicati.Library.Backend.Box.csproj">
-    </ProjectReference>
+    </ProjectReference>-->
     <ProjectReference Include="..\..\Library\Backend\AlternativeFTP\Duplicati.Library.Backend.AlternativeFTP.csproj">
     </ProjectReference>
-    <ProjectReference Include="..\..\Library\Backend\Dropbox\Duplicati.Library.Backend.Dropbox.csproj">
+    <!--<ProjectReference Include="..\..\Library\Backend\Dropbox\Duplicati.Library.Backend.Dropbox.csproj">
     </ProjectReference>
     <ProjectReference Include="..\..\Library\Backend\Tardigrade\Duplicati.Library.Backend.Tardigrade.csproj">
-    </ProjectReference>
+    </ProjectReference>-->
   </ItemGroup>
   
   <ItemGroup>

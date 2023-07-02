@@ -21,6 +21,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.IO;
 using System.Net;
+using System.Net.Http;
 
 namespace Duplicati.Library.UsageReporter
 {
@@ -57,45 +58,41 @@ namespace Duplicati.Library.UsageReporter
 
                 async (chan) =>
                 {
-                    while (true)
-                    {
-                        var f = await chan.ReadAsync();
-
-                        try
+                    using(var httpClient = new HttpClient())
+                        while (true)
                         {
-                            if (File.Exists(f))
+                            var f = await chan.ReadAsync();
+
+                            try
                             {
-                                var req = (HttpWebRequest)WebRequest.Create(UPLOAD_URL);
-                                req.Method = "POST";
-                                req.ContentType = "application/json; charset=utf-8";
-
-                                int rc;
-                                using (var fs = File.OpenRead(f))
+                                if (File.Exists(f))
                                 {
-                                    if (fs.Length > 0)
+                                    int rc;
+                                    using (var fs = File.OpenRead(f))
                                     {
-                                        req.ContentLength = fs.Length;
-                                        var areq = new Library.Utility.AsyncHttpRequest(req);
+                                        if (fs.Length > 0)
+                                        {
+                                            var content = new StreamContent(fs);
+                                            content.Headers.ContentType.MediaType = "application/json";
+                                            content.Headers.ContentType.CharSet = "utf-8";
+                                            content.Headers.ContentLength = fs.Length;
 
-                                        using (var rs = areq.GetRequestStream())
-                                            Library.Utility.Utility.CopyStream(fs, rs);
-
-                                        using (var resp = (HttpWebResponse)areq.GetResponse())
-                                            rc = (int)resp.StatusCode;
+                                            using (var resp = httpClient.PostAsync(UPLOAD_URL, content).Result)
+                                                rc = (int)resp.StatusCode;
+                                        }
+                                        else
+                                            rc = 200;
                                     }
-                                    else
-                                        rc = 200;
-                                }
 
-                                if (rc >= 200 && rc <= 299)
-                                    File.Delete(f);
+                                    if (rc >= 200 && rc <= 299)
+                                        File.Delete(f);
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Logging.Log.WriteErrorMessage(LOGTAG, "UploadFailed", ex, "UsageReporter failed");
                             }
                         }
-                        catch (Exception ex)
-                        {
-                            Logging.Log.WriteErrorMessage(LOGTAG, "UploadFailed", ex, "UsageReporter failed");
-                        }
-                    }
                 }
             );
 
