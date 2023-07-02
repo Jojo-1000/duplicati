@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Net;
+using System.Net.Http;
+using System.Threading.Tasks;
 using Duplicati.Library.Common;
 using Duplicati.Library.Interface;
 
@@ -277,10 +279,17 @@ namespace Duplicati.GUI.TrayIcon
                             }
                         }
                     }
-                    catch (WebException ex)
+                    catch (HttpRequestException ex)
                     {
                         System.Diagnostics.Trace.WriteLine("Request error: " + ex);
                         Console.WriteLine("Request error: " + ex);
+
+                        reSpawn++;
+                    }
+                    catch (TaskCanceledException ex)
+                    {
+                        System.Diagnostics.Trace.WriteLine("Timeout error: " + ex);
+                        Console.WriteLine("Timeout error: " + ex);
 
                         reSpawn++;
                     }

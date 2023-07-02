@@ -7,11 +7,13 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Net.Http;
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace Duplicati.Library.Modules.Builtin {
-    public class SendHttpMessage : ReportHelper
+namespace Duplicati.Library.Modules.Builtin
+{
+    public class SendHttpMessage : ReportHelper, IDisposable
     {
         /// <summary>
         /// The tag used for logging
@@ -98,8 +100,9 @@ namespace Duplicati.Library.Modules.Builtin {
         /// <summary>
         /// The http verb
         /// </summary>
-        private string m_verb;
+        private HttpMethod m_verb;
 
+        private HttpClient m_client;
         #endregion
 
 
@@ -113,7 +116,7 @@ namespace Duplicati.Library.Modules.Builtin {
         /// <summary>
         /// A localized string describing the module with a friendly name
         /// </summary>
-        public override string DisplayName { get { return Strings.SendHttpMessage.DisplayName;} }
+        public override string DisplayName { get { return Strings.SendHttpMessage.DisplayName; } }
 
         /// <summary>
         /// A localized description of the module
@@ -161,11 +164,11 @@ namespace Duplicati.Library.Modules.Builtin {
         protected override string LogLinesOptionName => OPTION_MAX_LOG_LINES;
         protected override string ResultFormatOptionName => OPTION_RESULT_FORMAT;
 
-		/// <summary>
-		/// This method is the interception where the module can interact with the execution environment and modify the settings.
-		/// </summary>
-		/// <param name="commandlineOptions">A set of commandline options passed to Duplicati</param>
-		protected override bool ConfigureModule(IDictionary<string, string> commandlineOptions)
+        /// <summary>
+        /// This method is the interception where the module can interact with the execution environment and modify the settings.
+        /// </summary>
+        /// <param name="commandlineOptions">A set of commandline options passed to Duplicati</param>
+        protected override bool ConfigureModule(IDictionary<string, string> commandlineOptions)
         {
             //We need a URL to report to
             commandlineOptions.TryGetValue(OPTION_URL, out m_url);
@@ -177,88 +180,84 @@ namespace Duplicati.Library.Modules.Builtin {
                 m_messageParameterName = DEFAULT_MESSAGE_PARAMETER_NAME;
 
             commandlineOptions.TryGetValue(OPTION_EXTRA_PARAMETERS, out m_extraParameters);
-            commandlineOptions.TryGetValue(OPTION_VERB, out m_verb);
-            if (string.IsNullOrWhiteSpace(m_verb))
-                m_verb = "POST";
+            commandlineOptions.TryGetValue(OPTION_VERB, out string verb);
+            if (string.IsNullOrWhiteSpace(verb))
+                m_verb = HttpMethod.Post;
+            else
+                m_verb = new HttpMethod(verb);
 
+            m_client = new HttpClient();
             return true;
         }
 
-		#endregion
+        #endregion
 
-		protected override string ReplaceTemplate(string input, object result, bool subjectline)
-		{
+        protected override string ReplaceTemplate(string input, object result, bool subjectline)
+        {
             // No need to do the expansion as we throw away the result
             if (subjectline)
                 return string.Empty;
 
             return base.ReplaceTemplate(input, result, subjectline);
-		}
+        }
 
-        protected override void SendMessage(string subject, string body) {
-            Exception ex = null;
-
-            byte[] data;
-            string contenttype;
+        protected override void SendMessage(string subject, string body)
+        {
+            HttpContent content;
 
             if (ExportFormat == ResultExportFormat.Json)
             {
-                contenttype = "application/json";
-                data = Encoding.UTF8.GetBytes(body);
+                content = new StringContent(body, Encoding.UTF8);
+                content.Headers.ContentType.MediaType = "application/json";
             }
             else
             {
-                contenttype = "application/x-www-form-urlencoded";
                 var postData = $"{m_messageParameterName}={System.Uri.EscapeDataString(body)}";
                 if (!string.IsNullOrEmpty(m_extraParameters))
                 {
                     postData += $"&{System.Uri.EscapeUriString(m_extraParameters)}";
                 }
-                data = Encoding.UTF8.GetBytes(postData);
+                content = new StringContent(postData, Encoding.UTF8);
+                content.Headers.ContentType.MediaType = "application/x-www-form-urlencoded";
             }
 
 
-            var request = (HttpWebRequest)WebRequest.Create(m_url);
-            request.ContentType = contenttype;
-            request.Method = m_verb;
-            request.ContentLength = data.Length;
+            var request = new HttpRequestMessage(m_verb, m_url);
+            request.Content = content;
 
-            try 
+            using (var response = m_client.SendAsync(request).Result)
             {
-                using (var stream = request.GetRequestStream()) 
+                if (response.IsSuccessStatusCode)
                 {
-                    stream.Write(data, 0, data.Length);
-                }
-
-                using (var response = (HttpWebResponse)request.GetResponse())
-                {
-                    Logging.Log.WriteVerboseMessage(LOGTAG, 
-                                                    "HttpResponseMessage", 
-                                                     "HTTP Response: {0} - {1}: {2}", 
-                                                     ((int)response.StatusCode).ToString(),
-                                                     response.StatusDescription,
-                                                     new StreamReader(response.GetResponseStream()).ReadToEnd()
-                                                    );
-                }
-            }
-            catch (Exception e) 
-            {
-                ex = e;
-                if (ex is WebException exception && exception.Response is HttpWebResponse response)
-                {
-                    Logging.Log.WriteWarningMessage(LOGTAG,
-                                                    "HttpResponseError",
-                                                    exception,
+                    Logging.Log.WriteVerboseMessage(LOGTAG,
+                                                    "HttpResponseMessage",
                                                      "HTTP Response: {0} - {1}: {2}",
                                                      ((int)response.StatusCode).ToString(),
-                                                     response.StatusDescription,
-                                                     new StreamReader(response.GetResponseStream()).ReadToEnd()
+                                                     response.ReasonPhrase,
+                                                     response.Content.ReadAsStringAsync().Result
                                                     );
+                }
+                else
+                {
+                    Logging.Log.WriteWarningMessage(LOGTAG,
+                            "HttpResponseError",
+                            null,
+                             "HTTP Response: {0} - {1}: {2}",
+                             ((int)response.StatusCode).ToString(),
+                             response.ReasonPhrase,
+                             response.Content.ReadAsStringAsync().Result
+                            );
+                    // Throw exception
+                    response.EnsureSuccessStatusCode();
                 }
             }
 
-            if (ex != null)
-                throw ex;
+        }
+
+        public void Dispose()
+        {
+            m_client?.Dispose();
+            m_client = null;
         }
     }
 }

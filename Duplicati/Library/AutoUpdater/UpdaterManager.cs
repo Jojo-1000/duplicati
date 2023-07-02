@@ -339,15 +339,15 @@ namespace Duplicati.Library.AutoUpdater
 
                 try
                 {
-                    using (var tmpfile = new Library.Utility.TempFile())
+                    using (var httpClient = new HttpClient(new HttpClientHandler() { UseCookies = false }))
                     {
-                        System.Net.WebClient wc = new System.Net.WebClient();
-                        wc.Headers.Add(System.Net.HttpRequestHeader.UserAgent, string.Format("{0} v{1}{2}", APPNAME, SelfVersion.Version, string.IsNullOrWhiteSpace(InstallID) ? "" : " -" + InstallID));
-                        wc.Headers.Add("X-Install-ID", InstallID);
-                        wc.DownloadFile(url, tmpfile);
+                        httpClient.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent",
+                            string.Format("{0} v{1}{2}", APPNAME, SelfVersion.Version, string.IsNullOrWhiteSpace(InstallID) ? "" : " -" + InstallID));
+                        httpClient.DefaultRequestHeaders.Add("X-Install-ID", InstallID);
 
-                        using (var fs = System.IO.File.OpenRead(tmpfile))
-                        using (var ss = new SignatureReadingStream(fs, SIGN_KEY))
+                        using (var resp = httpClient.GetAsync(url).Result.EnsureSuccessStatusCode())
+                        using (var cs = resp.Content.ReadAsStreamAsync().Result)
+                        using (var ss = new SignatureReadingStream(cs, SIGN_KEY))
                         using (var tr = new System.IO.StreamReader(ss))
                         using (var jr = new Newtonsoft.Json.JsonTextReader(tr))
                         {
@@ -451,8 +451,8 @@ namespace Duplicati.Library.AutoUpdater
             {
                 using (var httpClient = new HttpClient(new HttpClientHandler() { UseCookies = false }))
                 {
-                    httpClient.DefaultRequestHeaders.UserAgent.Add(
-                        new System.Net.Http.Headers.ProductInfoHeaderValue(APPNAME, SelfVersion.Version));
+                    httpClient.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent",
+                        string.Format("{0} v{1}{2}", APPNAME, SelfVersion.Version, string.IsNullOrWhiteSpace(InstallID) ? "" : " -" + InstallID));
                     httpClient.DefaultRequestHeaders.Add("X-Install-ID", InstallID);
 
                     foreach (var url in updates)
