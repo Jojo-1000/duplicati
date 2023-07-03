@@ -596,7 +596,7 @@ namespace Duplicati.Library.Main
                         Logging.Log.WriteInformationMessage(LOGTAG, "DeleteFileFailed", LC.L("Failed to delete file {0}, testing if file exists", item.RemoteFilename));
                         try
                         {
-                            if (!m_backend.ListAsync(m_token).Result.Select(x => x.Name).Contains(item.RemoteFilename))
+                            if (!m_backend.ListAsync(m_token).Await().Select(x => x.Name).Contains(item.RemoteFilename))
                             {
                                 lastException = null;
                                 Logging.Log.WriteInformationMessage(LOGTAG, "DeleteFileFailureRecovered", LC.L("Recovered from problem with attempting to delete non-existing file {0}", item.RemoteFilename));
@@ -754,7 +754,7 @@ namespace Duplicati.Library.Main
 
             if (m_options.ListVerifyUploads)
             {
-                var f = m_backend.ListAsync(m_token).Result.FirstOrDefault(n => n.Name.Equals(item.RemoteFilename, StringComparison.OrdinalIgnoreCase));
+                var f = m_backend.ListAsync(m_token).Await().FirstOrDefault(n => n.Name.Equals(item.RemoteFilename, StringComparison.OrdinalIgnoreCase));
                 if (f == null)
                     throw new Exception(string.Format("List verify failed, file was not found after upload: {0}", item.RemoteFilename));
                 else if (f.Size != item.Size && f.Size >= 0)
@@ -861,7 +861,7 @@ namespace Duplicati.Library.Main
                     // This nested try-catch-finally blocks will make sure we do not miss any exceptions ans all started tasks
                     // are properly ended and tidied up. For what is thrown: If exceptions in main thread occured (download) it is thrown,
                     // then hasher task is checked and last decryption. This resembles old logic.
-                    try { retHashcode = taskHasher.Result; }
+                    try { retHashcode = taskHasher.Await(); }
                     catch (AggregateException ex) { if (!hadException) { hadException = true; throw ex.Flatten().InnerException; } }
                     finally
                     {
@@ -1074,7 +1074,7 @@ namespace Duplicati.Library.Main
         {
             m_statwriter.SendEvent(BackendActionType.List, BackendEventType.Started, null, -1);
 
-            var r = m_backend.ListAsync(m_token).Result.ToList();
+            var r = m_backend.ListAsync(m_token).Await().ToList();
 
             StringBuilder sb = new StringBuilder();
             sb.AppendLine("[");
@@ -1116,7 +1116,7 @@ namespace Duplicati.Library.Main
 
                     try
                     {
-                        success = !m_backend.ListAsync(m_token).Result.Select(x => x.Name).Contains(item.RemoteFilename);
+                        success = !m_backend.ListAsync(m_token).Await().Select(x => x.Name).Contains(item.RemoteFilename);
                     }
                     catch
                     {

@@ -17,13 +17,13 @@
     </ProjectReference>
     <ProjectReference Include="..\..\Library\Backend\Jottacloud\Duplicati.Library.Backend.Jottacloud.csproj">
     </ProjectReference>
-    <!--<ProjectReference Include="..\..\Library\Backend\Rclone\Duplicati.Library.Backend.Rclone.csproj">
+    <ProjectReference Include="..\..\Library\Backend\Rclone\Duplicati.Library.Backend.Rclone.csproj">
     </ProjectReference>
-    <ProjectReference Include="..\..\Library\Backend\SharePoint\Duplicati.Library.Backend.SharePoint.csproj">
-    </ProjectReference>
+    <!--<ProjectReference Include="..\..\Library\Backend\SharePoint\Duplicati.Library.Backend.SharePoint.csproj">
+    </ProjectReference>-->
     <ProjectReference Include="..\..\Library\Backend\Sia\Duplicati.Library.Backend.Sia.csproj">
     </ProjectReference>
-    <ProjectReference Include="..\..\Library\Backend\Storj\Duplicati.Library.Backend.Storj.csproj">
+    <!--<ProjectReference Include="..\..\Library\Backend\Storj\Duplicati.Library.Backend.Storj.csproj">
     </ProjectReference>
     <ProjectReference Include="..\..\Library\Backend\Tardigrade\Duplicati.Library.Backend.Tardigrade.csproj">
     </ProjectReference>
@@ -39,9 +39,9 @@
     </ProjectReference>
     <ProjectReference Include="..\..\License\Duplicati.License.csproj">
     </ProjectReference>
-    <!--<ProjectReference Include="..\..\Library\Backend\OneDrive\Duplicati.Library.Backend.OneDrive.csproj">
+    <ProjectReference Include="..\..\Library\Backend\OneDrive\Duplicati.Library.Backend.OneDrive.csproj">
     </ProjectReference>
-    <ProjectReference Include="..\..\Library\Backend\TahoeLAFS\Duplicati.Library.Backend.TahoeLAFS.csproj">
+    <!--<ProjectReference Include="..\..\Library\Backend\TahoeLAFS\Duplicati.Library.Backend.TahoeLAFS.csproj">
     </ProjectReference>-->
     <ProjectReference Include="..\..\Library\Backend\GoogleServices\Duplicati.Library.Backend.GoogleServices.csproj">
     </ProjectReference>

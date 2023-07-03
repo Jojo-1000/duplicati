@@ -22,15 +22,15 @@
     </ProjectReference>
     <ProjectReference Include="..\..\Library\Backend\Jottacloud\Duplicati.Library.Backend.Jottacloud.csproj">
     </ProjectReference>
-    <!--<ProjectReference Include="..\..\Library\Backend\Rclone\Duplicati.Library.Backend.Rclone.csproj">
-    </ProjectReference>-->
+    <ProjectReference Include="..\..\Library\Backend\Rclone\Duplicati.Library.Backend.Rclone.csproj">
+    </ProjectReference>
     <ProjectReference Include="..\..\Library\Backend\S3\Duplicati.Library.Backend.S3.csproj">
     </ProjectReference>
     <!--<ProjectReference Include="..\..\Library\Backend\SharePoint\Duplicati.Library.Backend.SharePoint.csproj">
-    </ProjectReference>
+    </ProjectReference>-->
     <ProjectReference Include="..\..\Library\Backend\Sia\Duplicati.Library.Backend.Sia.csproj">
     </ProjectReference>
-    <ProjectReference Include="..\..\Library\Backend\SSHv2\Duplicati.Library.Backend.SSHv2.csproj">
+    <!--<ProjectReference Include="..\..\Library\Backend\SSHv2\Duplicati.Library.Backend.SSHv2.csproj">
     </ProjectReference>
     <ProjectReference Include="..\..\Library\Backend\TahoeLAFS\Duplicati.Library.Backend.TahoeLAFS.csproj">
     </ProjectReference>
@@ -52,8 +52,8 @@
     </ProjectReference>
     <ProjectReference Include="..\..\License\Duplicati.License.csproj">
     </ProjectReference>
-    <!--<ProjectReference Include="..\..\Library\Backend\OneDrive\Duplicati.Library.Backend.OneDrive.csproj">
-    </ProjectReference>-->
+    <ProjectReference Include="..\..\Library\Backend\OneDrive\Duplicati.Library.Backend.OneDrive.csproj">
+    </ProjectReference>
     <ProjectReference Include="..\..\Library\Backend\GoogleServices\Duplicati.Library.Backend.GoogleServices.csproj">
     </ProjectReference>
     <ProjectReference Include="..\..\Library\Backend\OpenStack\Duplicati.Library.Backend.OpenStack.csproj">

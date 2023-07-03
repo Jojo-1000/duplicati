@@ -1,7 +1,9 @@
 ﻿using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using Duplicati.Library.Backend.MicrosoftGraph;
 using Duplicati.Library.Interface;
+using Duplicati.Library.Utility;
 
 namespace Duplicati.Library.Backend
 {
@@ -35,7 +37,7 @@ namespace Duplicati.Library.Backend
 
                 groupId = groupIdOption;
             }
-            
+
             if (string.IsNullOrEmpty(groupId))
             {
                 throw new UserInformationException(Strings.MicrosoftGroup.MissingGroupIdAndEmailAddress, "MicrosoftGroupMissingGroupIdAndEmailAddress");
@@ -84,7 +86,7 @@ namespace Duplicati.Library.Backend
             // We can get all groups that have the given email as one of their addresses with:
             // https://graph.microsoft.com/v1.0/groups?$filter=mail eq '{email}' or proxyAddresses/any(x:x eq 'smtp:{email}')
             string request = string.Format("{0}/groups?$filter=mail eq '{1}' or proxyAddresses/any(x:x eq 'smtp:{1}')", this.ApiVersion, email);
-            GraphCollection<Group> groups = this.Get<GraphCollection<Group>>(request);
+            GraphCollection<Group> groups = this.GetAsync<GraphCollection<Group>>(request, CancellationToken.None).Await();
             if (groups.Value.Length == 0)
             {
                 throw new UserInformationException(Strings.MicrosoftGroup.NoGroupsWithEmail(email), "MicrosoftGroupNoGroupsWithEmail");

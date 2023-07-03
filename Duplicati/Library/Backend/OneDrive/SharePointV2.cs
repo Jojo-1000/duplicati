@@ -2,9 +2,10 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-
+using System.Threading;
 using Duplicati.Library.Backend.MicrosoftGraph;
 using Duplicati.Library.Interface;
+using Duplicati.Library.Utility;
 
 namespace Duplicati.Library.Backend
 {
@@ -86,7 +87,7 @@ namespace Duplicati.Library.Backend
         /// <returns>Path within the drive</returns>
         protected override string GetRootPathFromUrl(string url)
         {
-            Uri uri = new Uri(url);
+            System.Uri uri = new System.Uri(url);
 
             // If the user gave a URL like "https://{tenant}.sharepoint.com/path" in the UI,
             // it might appear here as "sharepoint://https://{tenant}.sharepoint.com/path".
@@ -94,7 +95,7 @@ namespace Duplicati.Library.Backend
             if (string.Equals(uri.Host, "https", StringComparison.OrdinalIgnoreCase) || string.Equals(uri.Host, "http", StringComparison.OrdinalIgnoreCase))
             {
                 // LocalPath will already be prefixed by "//", due to the https:// part.
-                uri = new Uri(string.Format("{0}:{1}", uri.Scheme, uri.LocalPath));
+                uri = new System.Uri(string.Format("{0}:{1}", uri.Scheme, uri.LocalPath));
             }
 
             SharePointSite site = this.GetSharePointSite(uri);
@@ -103,10 +104,10 @@ namespace Duplicati.Library.Backend
                 // Get the web URL of the site's main drive
                 try
                 {
-                    Drive drive = this.Get<Drive>(string.Format("{0}/sites/{1}/drive", this.ApiVersion, site.Id));
+                    Drive drive = this.GetAsync<Drive>(string.Format("{0}/sites/{1}/drive", this.ApiVersion, site.Id), System.Threading.CancellationToken.None).Await();
 
                     this.siteId = site.Id;
-                    Uri driveWebUrl = new Uri(drive.WebUrl);
+                    System.Uri driveWebUrl = new System.Uri(drive.WebUrl);
 
                     // Make sure to replace any "//" in the original path with "/", so the substrings line up.
                     return uri.LocalPath.Replace("//", "/").Substring(driveWebUrl.LocalPath.Length);
@@ -120,7 +121,7 @@ namespace Duplicati.Library.Backend
             return base.GetRootPathFromUrl(url);
         }
 
-        private SharePointSite GetSharePointSite(Uri url)
+        private SharePointSite GetSharePointSite(System.Uri url)
         {
             UriBuilder uri = new UriBuilder(url);
 
@@ -136,7 +137,7 @@ namespace Duplicati.Library.Backend
                 try
                 {
                     string request = string.Format("{0}:/{1}", requestBase, uri.Path.Substring(0, siteHint));
-                    return this.Get<SharePointSite>(request);
+                    return this.GetAsync<SharePointSite>(request, CancellationToken.None).Await();
                 }
                 catch (MicrosoftGraphException)
                 {
@@ -150,7 +151,7 @@ namespace Duplicati.Library.Backend
                 try
                 {
                     string request = string.Format("{0}:/{1}", requestBase, string.Join("/", pathPieces.Take(i)));
-                    return this.Get<SharePointSite>(request);
+                    return this.GetAsync<SharePointSite>(request, CancellationToken.None).Await();
                 }
                 catch (MicrosoftGraphException)
                 {

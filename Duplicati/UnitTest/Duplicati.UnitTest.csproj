@@ -32,19 +32,19 @@
     </ProjectReference>
     <ProjectReference Include="..\Library\Backend\OAuthHelper\Duplicati.Library.OAuthHelper.csproj">
     </ProjectReference>
-    <!--<ProjectReference Include="..\Library\Backend\Rclone\Duplicati.Library.Backend.Rclone.csproj">
-	  </ProjectReference>-->
+    <ProjectReference Include="..\Library\Backend\Rclone\Duplicati.Library.Backend.Rclone.csproj">
+	  </ProjectReference>
     <ProjectReference Include="..\Library\Backend\Idrivee2\Duplicati.Library.Backend.Idrivee2.csproj">
     </ProjectReference>
-    <!--<ProjectReference Include="..\Library\Backend\OneDrive\Duplicati.Library.Backend.OneDrive.csproj">
-    </ProjectReference>-->
+    <ProjectReference Include="..\Library\Backend\OneDrive\Duplicati.Library.Backend.OneDrive.csproj">
+    </ProjectReference>
     <ProjectReference Include="..\Library\Backend\S3\Duplicati.Library.Backend.S3.csproj">
     </ProjectReference>
     <!--<ProjectReference Include="..\Library\Backend\SharePoint\Duplicati.Library.Backend.SharePoint.csproj">
-    </ProjectReference>
+    </ProjectReference>-->
     <ProjectReference Include="..\Library\Backend\Sia\Duplicati.Library.Backend.Sia.csproj">
     </ProjectReference>
-    <ProjectReference Include="..\Library\Backend\SSHv2\Duplicati.Library.Backend.SSHv2.csproj">
+    <!--<ProjectReference Include="..\Library\Backend\SSHv2\Duplicati.Library.Backend.SSHv2.csproj">
     </ProjectReference>
     <ProjectReference Include="..\Library\Backend\TahoeLAFS\Duplicati.Library.Backend.TahoeLAFS.csproj">
     </ProjectReference>
@@ -78,8 +78,8 @@
     </ProjectReference>
     <ProjectReference Include="..\Library\SQLiteHelper\Duplicati.Library.SQLiteHelper.csproj">
     </ProjectReference>
-    <!--<ProjectReference Include="..\Library\Backend\OneDrive\Duplicati.Library.Backend.OneDrive.csproj">
-    </ProjectReference>-->
+    <ProjectReference Include="..\Library\Backend\OneDrive\Duplicati.Library.Backend.OneDrive.csproj">
+    </ProjectReference>
     <ProjectReference Include="..\Library\Localization\Duplicati.Library.Localization.csproj">
     </ProjectReference>
     <ProjectReference Include="..\Library\AutoUpdater\Duplicati.Library.AutoUpdater.csproj">

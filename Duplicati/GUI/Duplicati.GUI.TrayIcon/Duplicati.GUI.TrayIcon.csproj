@@ -63,8 +63,8 @@
     </ProjectReference>
     <ProjectReference Include="..\..\Library\Backend\OAuthHelper\Duplicati.Library.OAuthHelper.csproj">
     </ProjectReference>
-    <!--<ProjectReference Include="..\..\Library\Backend\Rclone\Duplicati.Library.Backend.Rclone.csproj">
-    </ProjectReference>-->
+    <ProjectReference Include="..\..\Library\Backend\Rclone\Duplicati.Library.Backend.Rclone.csproj">
+    </ProjectReference>
     <ProjectReference Include="..\..\Library\Backend\S3\Duplicati.Library.Backend.S3.csproj">
     </ProjectReference>
     <!--<ProjectReference Include="..\..\Library\Backend\SharePoint\Duplicati.Library.Backend.SharePoint.csproj">
@@ -119,8 +119,8 @@
     </ProjectReference>
     <ProjectReference Include="..\..\Library\AutoUpdater\Duplicati.Library.AutoUpdater.csproj">
     </ProjectReference>
-    <!--<ProjectReference Include="..\..\Library\Backend\OneDrive\Duplicati.Library.Backend.OneDrive.csproj">
-    </ProjectReference>-->
+    <ProjectReference Include="..\..\Library\Backend\OneDrive\Duplicati.Library.Backend.OneDrive.csproj">
+    </ProjectReference>
     <ProjectReference Include="..\..\Library\Backend\GoogleServices\Duplicati.Library.Backend.GoogleServices.csproj">
     </ProjectReference>
     <ProjectReference Include="..\..\Library\Backend\OpenStack\Duplicati.Library.Backend.OpenStack.csproj">
@@ -139,8 +139,8 @@
     </ProjectReference>
     <ProjectReference Include="..\..\Library\Backend\AlternativeFTP\Duplicati.Library.Backend.AlternativeFTP.csproj">
     </ProjectReference>
-    <!--<ProjectReference Include="..\..\Library\Backend\Sia\Duplicati.Library.Backend.Sia.csproj">
-    </ProjectReference>-->
+    <ProjectReference Include="..\..\Library\Backend\Sia\Duplicati.Library.Backend.Sia.csproj">
+    </ProjectReference>
     <ProjectReference Include="..\..\Library\Backend\Dropbox\Duplicati.Library.Backend.Dropbox.csproj">
     </ProjectReference>
     <ProjectReference Include="..\..\Tools\Duplicati.Tools.csproj">

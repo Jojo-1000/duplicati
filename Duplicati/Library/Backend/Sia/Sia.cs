@@ -4,7 +4,9 @@ using Duplicati.Library.Utility;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net;
+using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -21,6 +23,8 @@ namespace Duplicati.Library.Backend.Sia
         private readonly string m_targetpath;
         private readonly float m_redundancy;
         private readonly string m_authorization;
+
+        private readonly HttpClient m_client;
 
         // ReSharper disable once UnusedMember.Global
         // This constructor is needed by the BackendLoader.
@@ -49,8 +53,8 @@ namespace Duplicati.Library.Backend.Sia
             {
                 m_targetpath = options[SIA_TARGETPATH];
             }
-            while(m_targetpath.Contains("//"))
-                m_targetpath = m_targetpath.Replace("//","/");
+            while (m_targetpath.Contains("//"))
+                m_targetpath = m_targetpath.Replace("//", "/");
             while (m_targetpath.StartsWith("/", StringComparison.Ordinal))
                 m_targetpath = m_targetpath.Substring(1);
             while (m_targetpath.EndsWith("/", StringComparison.Ordinal))
@@ -62,39 +66,26 @@ namespace Duplicati.Library.Backend.Sia
             m_authorization = options.ContainsKey(SIA_PASSWORD) && !string.IsNullOrEmpty(options[SIA_PASSWORD])
                 ? "Basic " + System.Convert.ToBase64String(System.Text.Encoding.GetEncoding("ISO-8859-1").GetBytes(":" + options[SIA_PASSWORD]))
                 : null;
-        }
 
-        private System.Net.HttpWebRequest CreateRequest(string endpoint)
-        {
-            string baseurl = "http://" + m_apihost + ":" + m_apiport;
-            System.Net.HttpWebRequest req = (System.Net.HttpWebRequest)System.Net.HttpWebRequest.Create(baseurl + endpoint);
+            // Disable saving cookies, because they can cause unexpected behavior
+            m_client = new HttpClient(new HttpClientHandler() { UseCookies = false })
+            {
+                BaseAddress = new System.Uri("http://" + m_apihost + ":" + m_apiport)
+            };
+            // Disable keep-alive
+            m_client.DefaultRequestHeaders.ConnectionClose = true;
+            m_client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", string.Format("Sia-Agent (Duplicati SIA client {0})", System.Reflection.Assembly.GetExecutingAssembly().GetName().Version));
 
             if (m_authorization != null)
             {
                 // Manually set Authorization header, since System.Net.NetworkCredential ignores credentials with empty usernames
-                req.Headers.Add("Authorization", m_authorization);
+                m_client.DefaultRequestHeaders.TryAddWithoutValidation("Authorization", m_authorization);
             }
-
-            req.KeepAlive = false;
-            req.UserAgent = string.Format("Sia-Agent (Duplicati SIA client {0})", System.Reflection.Assembly.GetExecutingAssembly().GetName().Version);
-
-            return req;
         }
 
-        private string getResponseBodyOnError(string context, System.Net.WebException wex)
+        private async Task<string> getResponseBodyOnErrorAsync(string context, HttpResponseMessage response)
         {
-            HttpWebResponse response = wex.Response as HttpWebResponse;
-            if (response is null)
-            {
-                return $"{context} failed with error: {wex.Message}";
-            }
-
-            string body = "";
-            using (System.IO.Stream data = response.GetResponseStream())
-            using (var reader = new System.IO.StreamReader(data))
-            {
-                body = reader.ReadToEnd();
-            }
+            string body = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
             return string.Format("{0} failed, response: {1}", context, body);
         }
 
@@ -140,27 +131,21 @@ namespace Duplicati.Library.Backend.Sia
             public SiaDownloadFile[] Files { get; set; }
         }
 
-        private SiaFileList GetFiles()
+        private async Task<SiaFileList> GetFilesAsync(CancellationToken cancelToken)
         {
             var fl = new SiaFileList();
             string endpoint = "/renter/files";
 
             try
             {
-                System.Net.HttpWebRequest req = CreateRequest(endpoint);
-                req.Method = System.Net.WebRequestMethods.Http.Get;
-
-                Utility.AsyncHttpRequest areq = new Utility.AsyncHttpRequest(req);
-
-                using (System.Net.HttpWebResponse resp = (System.Net.HttpWebResponse)areq.GetResponse())
+                using (var resp = await m_client.GetAsync(endpoint, cancelToken).ConfigureAwait(false))
                 {
-                    int code = (int)resp.StatusCode;
-                    if (code < 200 || code >= 300)
-                        throw new System.Net.WebException(resp.StatusDescription, null, System.Net.WebExceptionStatus.ProtocolError, resp);
+                    if (!resp.IsSuccessStatusCode)
+                        throw new Exception(await getResponseBodyOnErrorAsync(endpoint, resp));
 
                     var serializer = new JsonSerializer();
 
-                    using (var rs = areq.GetResponseStream())
+                    using (var rs = await resp.Content.ReadAsStreamAsync().ConfigureAwait(false))
                     using (var sr = new System.IO.StreamReader(rs))
                     using (var jr = new Newtonsoft.Json.JsonTextReader(sr))
                     {
@@ -168,16 +153,16 @@ namespace Duplicati.Library.Backend.Sia
                     }
                 }
             }
-            catch (System.Net.WebException wex)
+            catch (Exception ex)
             {
-                throw new Exception(getResponseBodyOnError(endpoint, wex));
+                throw new Exception($"{endpoint} failed with error: {ex.Message}", ex);
             }
             return fl;
         }
 
-        private bool IsUploadComplete(string siafilename)
+        private async Task<bool> IsUploadCompleteAsync(string siafilename, CancellationToken cancelToken)
         {
-            SiaFileList fl = GetFiles();
+            SiaFileList fl = await GetFilesAsync(cancelToken).ConfigureAwait(false);
             if (fl.Files == null)
                 return false;
 
@@ -194,27 +179,22 @@ namespace Duplicati.Library.Backend.Sia
             return false;
         }
 
-        private SiaDownloadList GetDownloads()
+        private async Task<SiaDownloadList> GetDownloadsAsync(CancellationToken cancelToken)
         {
             var fl = new SiaDownloadList();
             string endpoint = "/renter/downloads";
 
             try
             {
-                System.Net.HttpWebRequest req = CreateRequest(endpoint);
-                req.Method = System.Net.WebRequestMethods.Http.Get;
-
-                Utility.AsyncHttpRequest areq = new Utility.AsyncHttpRequest(req);
-
-                using (System.Net.HttpWebResponse resp = (System.Net.HttpWebResponse)areq.GetResponse())
+                using (var resp = await m_client.GetAsync(endpoint, cancelToken).ConfigureAwait(false))
                 {
                     int code = (int)resp.StatusCode;
-                    if (code < 200 || code >= 300)
-                        throw new System.Net.WebException(resp.StatusDescription, null, System.Net.WebExceptionStatus.ProtocolError, resp);
+                    if (!resp.IsSuccessStatusCode)
+                        throw new Exception(await getResponseBodyOnErrorAsync(endpoint, resp).ConfigureAwait(false));
 
                     var serializer = new JsonSerializer();
 
-                    using (var rs = areq.GetResponseStream())
+                    using (var rs = await resp.Content.ReadAsStreamAsync().ConfigureAwait(false))
                     using (var sr = new System.IO.StreamReader(rs))
                     using (var jr = new Newtonsoft.Json.JsonTextReader(sr))
                     {
@@ -222,16 +202,16 @@ namespace Duplicati.Library.Backend.Sia
                     }
                 }
             }
-            catch (System.Net.WebException wex)
+            catch (Exception ex)
             {
-                throw new Exception(getResponseBodyOnError(endpoint, wex));
+                throw new Exception($"{endpoint} failed with error: {ex.Message}", ex);
             }
             return fl;
         }
 
-        private bool IsDownloadComplete(string siafilename, string localname)
+        private async Task<bool> IsDownloadCompleteAsync(string siafilename, string localname, CancellationToken cancelToken)
         {
-            SiaDownloadList fl = GetDownloads();
+            SiaDownloadList fl = await GetDownloadsAsync(cancelToken);
             if (fl.Files == null)
                 return false;
 
@@ -264,14 +244,13 @@ namespace Duplicati.Library.Backend.Sia
 
         #region IBackend Members
 
-        public void Test()
-        {
-            this.TestList();
-        }
+        public Task TestAsync(CancellationToken cancelToken)
+            => this.TestListAsync(cancelToken);
 
-        public void CreateFolder()
+        public Task CreateFolderAsync(CancellationToken cancelToken)
         {
             // Dummy method, Sia doesn't have folders
+            return Task.CompletedTask;
         }
 
         public string DisplayName
@@ -283,151 +262,105 @@ namespace Duplicati.Library.Backend.Sia
         {
             get { return "sia"; }
         }
-        
-        public IEnumerable<IFileEntry> List()
+
+        public async Task<IList<IFileEntry>> ListAsync(CancellationToken cancelToken)
         {
             SiaFileList fl;
             try
             {
-                fl = GetFiles();
+                fl = await GetFilesAsync(cancelToken).ConfigureAwait(false);
             }
-            catch (System.Net.WebException wex)
+            catch (HttpRequestException wex)
             {
-                throw new Exception("failed to call /renter/files "+wex.Message);
+                throw new Exception("failed to call /renter/files " + wex.Message);
             }
 
             if (fl.Files != null)
             {
-                foreach (var f in fl.Files)
-                {
-                    // Sia returns a complete file list, but we're only interested in files that are
-                    // in our target path
-                    if (f.Siapath.StartsWith(m_targetpath, StringComparison.Ordinal))
-                    {
-                        FileEntry fe = new FileEntry(f.Siapath.Substring(m_targetpath.Length + 1))
+                return (from f in fl.Files
+                            // Sia returns a complete file list, but we're only interested in files that are in our target path
+                        where f.Siapath.StartsWith(m_targetpath, StringComparison.Ordinal)
+                        select new FileEntry(f.Siapath.Substring(m_targetpath.Length + 1))
                         {
                             Size = f.Filesize,
                             IsFolder = false
-                        };
-                        yield return fe;
-                    }
-                }
+                        } as IFileEntry).ToList();
             }
+            return new List<IFileEntry>();
         }
 
-        public Task PutAsync(string remotename, string filename, CancellationToken cancelToken)
+        public async Task PutAsync(string remotename, System.IO.Stream source, CancellationToken cancelToken)
         {
-            string endpoint ="";
             string siafile = m_targetpath + "/" + remotename;
+            string filename = (source as FauxStream).Filename;
 
-            try {
-                endpoint = string.Format("/renter/upload/{0}/{1}?source={2}",
-                    m_targetpath, 
-                    Utility.Uri.UrlEncode(remotename).Replace("+", "%20"),
-                    Utility.Uri.UrlEncode(filename).Replace("+", "%20")
-                );
+            string endpoint = string.Format("/renter/upload/{0}/{1}?source={2}",
+                m_targetpath,
+                Utility.Uri.UrlEncode(remotename).Replace("+", "%20"),
+                Utility.Uri.UrlEncode(filename).Replace("+", "%20")
+            );
 
-                HttpWebRequest req = CreateRequest(endpoint);
-                req.Method = WebRequestMethods.Http.Post;
-
-                AsyncHttpRequest areq = new AsyncHttpRequest(req);
-
-                using (HttpWebResponse resp = (HttpWebResponse)areq.GetResponse())
-                {
-                    int code = (int)resp.StatusCode;
-                    if (code < 200 || code >= 300)
-                        throw new WebException(resp.StatusDescription, null, WebExceptionStatus.ProtocolError, resp);
-
-                    while (! IsUploadComplete( siafile ))
-                    {
-                        Thread.Sleep(5000);
-                    }
-                }
-            }
-            catch (WebException wex)
+            using (var resp = await m_client.PostAsync(endpoint, null, cancelToken).ConfigureAwait(false))
             {
-                throw new Exception(getResponseBodyOnError(endpoint, wex));
-            }
+                if (!resp.IsSuccessStatusCode)
+                    throw new Exception(await getResponseBodyOnErrorAsync(endpoint, resp).ConfigureAwait(false));
 
-            return Task.FromResult(true);
+                while (!await IsUploadCompleteAsync(siafile, cancelToken).ConfigureAwait(false))
+                {
+                    await Task.Delay(5000, cancelToken).ConfigureAwait(false);
+                }
+            }
         }
 
-        public void Get(string remotename, string localname)
+        public async Task GetAsync(string remotename, System.IO.Stream destination, CancellationToken cancelToken)
         {
-            string endpoint = "";
             string siafile = m_targetpath + "/" + remotename;
+            string localname = (destination as FauxStream).Filename;
             string tmpfilename = localname + ".tmp";
 
-            try
+            string endpoint = string.Format("/renter/download/{0}/{1}?destination={2}",
+                m_targetpath,
+                Library.Utility.Uri.UrlEncode(remotename, spacevalue: "%20"),
+                Library.Utility.Uri.UrlEncode(tmpfilename, spacevalue: "%20")
+            );
+
+            using (var resp = await m_client.GetAsync(endpoint, cancelToken).ConfigureAwait(false))
             {
-                endpoint = string.Format("/renter/download/{0}/{1}?destination={2}",
-                    m_targetpath,
-                    Library.Utility.Uri.UrlEncode(remotename).Replace("+", "%20"),
-                    Library.Utility.Uri.UrlEncode(tmpfilename).Replace("+", "%20")
-                );
-                System.Net.HttpWebRequest req = CreateRequest(endpoint);
-                req.Method = System.Net.WebRequestMethods.Http.Get;
+                if (resp.StatusCode == HttpStatusCode.NotFound)
+                    throw new FileMissingException(resp.ReasonPhrase);
+                else if (!resp.IsSuccessStatusCode)
+                    throw new Exception(await getResponseBodyOnErrorAsync(endpoint, resp).ConfigureAwait(false));
 
-                Utility.AsyncHttpRequest areq = new Utility.AsyncHttpRequest(req);
-
-                using (System.Net.HttpWebResponse resp = (System.Net.HttpWebResponse)areq.GetResponse())
+                while (!await IsDownloadCompleteAsync(siafile, localname, cancelToken))
                 {
-                    int code = (int)resp.StatusCode;
-                    if (code < 200 || code >= 300)
-                        throw new System.Net.WebException(resp.StatusDescription, null, System.Net.WebExceptionStatus.ProtocolError, resp);
+                    await Task.Delay(5000, cancelToken).ConfigureAwait(false);
+                }
 
-                    while (!IsDownloadComplete(siafile, localname))
-                    {
-                        System.Threading.Thread.Sleep(5000);
-                    }
-                   
+                await Task.Run(() =>
+                {
                     System.IO.File.Copy(tmpfilename, localname, true);
                     try
                     {
                         System.IO.File.Delete(tmpfilename);
-                    } catch (Exception)
-                    {
-
                     }
-                }
-            }
-            catch (System.Net.WebException wex)
-            {
-                if (wex.Response is HttpWebResponse response && response.StatusCode == System.Net.HttpStatusCode.NotFound)
-                    throw new FileMissingException(wex);
-                else
-                    throw new Exception(getResponseBodyOnError(endpoint, wex));
+                    catch { }
+                }).ConfigureAwait(false);
             }
         }
 
-        public void Delete(string remotename)
+        public async Task DeleteAsync(string remotename, CancellationToken cancelToken)
         {
-            string endpoint = "";
+            string endpoint = string.Format("/renter/delete/{0}/{1}",
+                m_targetpath,
+                Library.Utility.Uri.UrlEncode(remotename, spacevalue: "%20")
+            );
 
-            try
+            using (var resp = await m_client.PostAsync(endpoint, null, cancelToken).ConfigureAwait(false))
             {
-                endpoint = string.Format("/renter/delete/{0}/{1}",
-                    m_targetpath,
-                    Library.Utility.Uri.UrlEncode(remotename).Replace("+", "%20")
-                );
-                System.Net.HttpWebRequest req = CreateRequest(endpoint);
-                req.Method = System.Net.WebRequestMethods.Http.Post;
-
-                Utility.AsyncHttpRequest areq = new Utility.AsyncHttpRequest(req);
-
-                using (System.Net.HttpWebResponse resp = (System.Net.HttpWebResponse)areq.GetResponse())
-                {
-                    int code = (int)resp.StatusCode;
-                    if (code < 200 || code >= 300)
-                        throw new System.Net.WebException(resp.StatusDescription, null, System.Net.WebExceptionStatus.ProtocolError, resp);
-                }
-            }
-            catch (System.Net.WebException wex)
-            {
-                if (wex.Response is HttpWebResponse response && response.StatusCode == System.Net.HttpStatusCode.NotFound)
-                    throw new FileMissingException(wex);
-                else
-                    throw new Exception(getResponseBodyOnError(endpoint, wex));
+                if (resp.StatusCode == HttpStatusCode.NotFound)
+                    throw new FileMissingException(resp.ReasonPhrase);
+                else if (!resp.IsSuccessStatusCode)
+                    throw new Exception(await getResponseBodyOnErrorAsync(endpoint, resp).ConfigureAwait(false));
             }
         }
 
@@ -435,7 +368,7 @@ namespace Duplicati.Library.Backend.Sia
         public IList<ICommandLineArgument> SupportedCommands
         {
             get
-            {    
+            {
                 return new List<ICommandLineArgument>(new ICommandLineArgument[] {
                     new CommandLineArgument(SIA_TARGETPATH, CommandLineArgument.ArgumentType.String, Strings.Sia.SiaPathDescriptionShort, Strings.Sia.SiaPathDescriptionLong, "/backup"),
                     new CommandLineArgument(SIA_PASSWORD, CommandLineArgument.ArgumentType.Password, Strings.Sia.SiaPasswordShort, Strings.Sia.SiaPasswordLong, null),
@@ -457,13 +390,16 @@ namespace Duplicati.Library.Backend.Sia
             get { return new string[] { new System.Uri(m_apihost).Host }; }
         }
 
+        // Sia needs to use file paths
+        public bool SupportsStreaming => false;
+
         #endregion
 
         #region IDisposable Members
 
         public void Dispose()
         {
-
+            m_client.Dispose();
         }
 
         #endregion

@@ -52,7 +52,7 @@ namespace Duplicati.Library.Backend
 
         public Rclone()
         {
-            
+
         }
 
         public Rclone(string url, Dictionary<string, string> options)
@@ -83,7 +83,7 @@ namespace Duplicati.Library.Backend
 #endif
         }
 
-#region IBackendInterface Members
+        #region IBackendInterface Members
 
         public string DisplayName
         {
@@ -130,13 +130,13 @@ namespace Duplicati.Library.Backend
                     if (!String.IsNullOrEmpty(e.Data))
                     {
 #if DEBUG
-                      //  Console.Error.WriteLine(String.Format("output {0}", e.Data));
+                        //  Console.Error.WriteLine(String.Format("output {0}", e.Data));
 #endif
                         // append the new data to the data already read-in
                         outputBuilder.Append(e.Data);
                     }
                 }
-            );  
+            );
 
             process.ErrorDataReceived += new System.Diagnostics.DataReceivedEventHandler
             (
@@ -161,7 +161,7 @@ namespace Duplicati.Library.Backend
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
 
-            while(!process.HasExited)
+            while (!process.HasExited)
             {
                 await Task.Delay(500).ConfigureAwait(false);
                 if (cancelToken.IsCancellationRequested)
@@ -184,7 +184,8 @@ namespace Duplicati.Library.Backend
                 throw new Exception($"Missing config file? {errorBuilder}");
             }
 
-            if (errorBuilder.Length > 0) {
+            if (errorBuilder.Length > 0)
+            {
                 throw new Exception(errorBuilder.ToString());
             }
 
@@ -192,17 +193,16 @@ namespace Duplicati.Library.Backend
         }
 
 
-        public IEnumerable<IFileEntry> List()
+        public async Task<IList<IFileEntry>> ListAsync(CancellationToken cancelToken)
         {
-            String str_result;
+            string str_result;
 
             try
             {
 
-                str_result = RcloneCommandExecuter(rclone_executable, $"lsjson {remote_repo}:{remote_path}", CancellationToken.None).Await();
+                str_result = await RcloneCommandExecuter(rclone_executable, $"lsjson {remote_repo}:{remote_path}", cancelToken).ConfigureAwait(false);
                 // this will give an error if the executable does not exist.
             }
-
             catch (FolderMissingException ex)
             {
                 throw new FolderMissingException(ex);
@@ -212,8 +212,9 @@ namespace Duplicati.Library.Backend
             {
                 //no date parsing by JArray needed, will be parsed later
                 jsonReader.DateParseHandling = DateParseHandling.None;
-                var array = JArray.Load(jsonReader);
+                var array = await JArray.LoadAsync(jsonReader, cancelToken).ConfigureAwait(false);
 
+                List<IFileEntry> lst = new List<IFileEntry>();
                 foreach (JObject item in array)
                 {
 #if DEBUG
@@ -228,15 +229,17 @@ namespace Duplicati.Library.Backend
                     {
                         IsFolder = item.GetValue("IsDir").Value<bool>()
                     };
-                    yield return fe;
+                    lst.Add(fe);
                 }
+                return lst;
             }
         }
 
-        public Task PutAsync(string remotename, string filename, CancellationToken cancelToken)
+        public Task PutAsync(string remotename, Stream source, CancellationToken cancelToken)
         {
             try
             {
+                string filename = (source as FauxStream).Filename;
                 return RcloneCommandExecuter(rclone_executable, $"copyto {local_repo}:{filename} {remote_repo}:{remote_path}/{remotename}", cancelToken);
             }
             catch (FolderMissingException ex)
@@ -245,28 +248,41 @@ namespace Duplicati.Library.Backend
             }
         }
 
-        public void Get(string remotename, string filename)
+        public Task GetAsync(string remotename, Stream destination, CancellationToken cancelToken)
         {
             try
             {
-                RcloneCommandExecuter(rclone_executable, $"copyto {remote_repo}:{Path.Combine(this.remote_path, remotename)} {local_repo}:{filename}", CancellationToken.None).Await();
+                string filename = (destination as FauxStream).Filename;
+                // TODO: Path.Combine probably breaks on windows
+                return RcloneCommandExecuter(rclone_executable, $"copyto {remote_repo}:{Path.Combine(this.remote_path, remotename)} {local_repo}:{filename}", cancelToken);
             }
-            catch (FolderMissingException ex) {
+            catch (FolderMissingException ex)
+            {
                 throw new FileMissingException(ex);
             }
         }
 
-        public void Delete(string remotename)
+        public Task DeleteAsync(string remotename, CancellationToken cancelToken)
         {
             //this will actually delete the folder if remotename is a folder... 
             // Will give a "directory not found" error if the file does not exist, need to change that to a missing file exception
             try
             {
-                RcloneCommandExecuter(rclone_executable, $"delete {remote_repo}:{Path.Combine(remote_path, remotename)}", CancellationToken.None).Await();
+                // TODO: Path.Combine probably breaks on windows
+                return RcloneCommandExecuter(rclone_executable, $"delete {remote_repo}:{Path.Combine(remote_path, remotename)}", cancelToken);
             }
-            catch (FolderMissingException ex) {
+            catch (FolderMissingException ex)
+            {
                 throw new FileMissingException(ex);
             }
+        }
+
+        public Task TestAsync(CancellationToken cancelToken)
+            => this.TestListAsync(cancelToken);
+
+        public Task CreateFolderAsync(CancellationToken cancelToken)
+        {
+            return RcloneCommandExecuter(rclone_executable, $"mkdir {remote_repo}:{remote_path}", cancelToken);
         }
 
         public IList<ICommandLineArgument> SupportedCommands
@@ -299,28 +315,19 @@ namespace Duplicati.Library.Backend
             get { return new string[] { remote_repo }; }
         }
 
+        // rclone can only handle file paths
+        public bool SupportsStreaming => false;
 
+        #endregion
 
-        public void Test()
-        {
-            this.TestList();
-        }
-
-        public void CreateFolder()
-        {
-            RcloneCommandExecuter(rclone_executable, $"mkdir {remote_repo}:{remote_path}", CancellationToken.None).Await();
-        }
-
-#endregion
-
-#region IDisposable Members
+        #region IDisposable Members
 
         public void Dispose()
         {
 
         }
 
-#endregion
+        #endregion
 
 
 
