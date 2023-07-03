@@ -18,6 +18,7 @@ using Duplicati.Library.Backend.OpenStack;
 using Duplicati.Library.Interface;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -25,7 +26,7 @@ namespace Duplicati.Library.Backend.HubiC
 {
     // ReSharper disable once UnusedMember.Global
     // This class is instantiated dynamically in the BackendLoader.
-    public class HubiCBackend : IBackend, IStreamingBackend
+    public class HubiCBackend : IBackend, IBackendPagination
     {
         private const string AUTHID_OPTION = "authid";
         private const string HUBIC_API_URL = "https://api.hubic.com/1.0/";
@@ -65,8 +66,12 @@ namespace Duplicati.Library.Backend.HubiC
             {
                 get
                 {
-                    if (m_token == null || (m_token.expires != null && (m_token.expires.Value - DateTime.UtcNow).TotalSeconds < 30))
-                        m_token = m_helper.ReadJSONResponse<HubiCAuthResponse>(HUBIC_API_CREDENTIAL_URL);
+                    if (m_token == null
+                        || (m_token.expires != null && (m_token.expires.Value - DateTime.UtcNow).TotalSeconds < 30))
+                    {
+                        m_token = m_helper.ReadJSONResponseAsync<HubiCAuthResponse>(
+                            HUBIC_API_CREDENTIAL_URL, null, "GET", CancellationToken.None).Result;
+                    }
                     return m_token;
                 }
             }
@@ -106,51 +111,47 @@ namespace Duplicati.Library.Backend.HubiC
             m_openstack = new OpenStackHelper(authid, url);
         }
 
-        #region IStreamingBackend implementation
+        #region IBackendPagination implementation
 
-        public Task PutAsync(string remotename, System.IO.Stream stream, CancellationToken cancelToken)
+        public IAsyncEnumerable<IFileEntry> ListEnumerableAsync(CancellationToken cancelToken)
         {
-            return m_openstack.PutAsync(remotename, stream, cancelToken);
-        }
-
-        public void Get(string remotename, System.IO.Stream stream)
-        {
-            m_openstack.Get(remotename, stream);
+            return m_openstack.ListEnumerableAsync(cancelToken);
         }
 
         #endregion
 
         #region IBackend implementation
 
-        public IEnumerable<IFileEntry> List()
+        public Task<IList<IFileEntry>> ListAsync(CancellationToken cancelToken)
         {
-            return m_openstack.List();
+            return m_openstack.ListAsync(cancelToken);
         }
 
-        public Task PutAsync(string remotename, string filename, CancellationToken cancelToken)
+        public Task PutAsync(string remotename, Stream source, CancellationToken cancelToken)
         {
-            return m_openstack.PutAsync(remotename, filename, cancelToken);
+            return m_openstack.PutAsync(remotename, source, cancelToken);
         }
 
-        public void Get(string remotename, string filename)
+        public Task GetAsync(string remotename, Stream destination, CancellationToken cancelToken)
         {
-            m_openstack.Get(remotename, filename);
+            return m_openstack.GetAsync(remotename, destination, cancelToken);
         }
 
-        public void Delete(string remotename)
+        public Task DeleteAsync(string remotename, CancellationToken cancelToken)
         {
-            m_openstack.Delete(remotename);
+            return m_openstack.DeleteAsync(remotename, cancelToken);
         }
 
-        public void Test()
+        public Task TestAsync(CancellationToken cancelToken)
         {
-            m_openstack.Test();
+            return m_openstack.TestAsync(cancelToken);
         }
 
-        public void CreateFolder()
+        public Task CreateFolderAsync(CancellationToken cancelToken)
         {
-            m_openstack.CreateFolder();
+            return m_openstack.CreateFolderAsync(cancelToken);
         }
+
 
         public string DisplayName
         {
@@ -189,6 +190,8 @@ namespace Duplicati.Library.Backend.HubiC
         {
             get { return new string[] { new Uri(HUBIC_API_URL).Host, m_openstack.EndPointDnsName }; }
         }
+
+        public bool SupportsStreaming => m_openstack.SupportsStreaming;
 
         #endregion
 

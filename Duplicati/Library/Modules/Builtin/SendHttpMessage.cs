@@ -249,7 +249,7 @@ namespace Duplicati.Library.Modules.Builtin
                              response.Content.ReadAsStringAsync().Result
                             );
                     // Throw exception
-                    response.EnsureSuccessStatusCode();
+                    throw new HttpRequestStatusException(response); ;
                 }
             }
 
