@@ -16,6 +16,7 @@
 //  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 using Duplicati.Library.Interface;
 using Newtonsoft.Json;
+using System.Threading;
 
 namespace Duplicati.Library.Backend
 {
@@ -30,7 +31,7 @@ namespace Duplicati.Library.Backend
             base.AutoAuthHeader = true;
             base.AutoV2 = false; // Jottacloud is not v2 compatible because it generates a new refresh token with every access token refresh and invalidates the old.
 
-            var userinfo = GetJSONData<UserInfo>(USERINFO_URL);
+            var userinfo = GetJSONDataAsync<UserInfo>(USERINFO_URL, CancellationToken.None).Result;
             if (userinfo == null || string.IsNullOrEmpty(userinfo.Username))
                 throw new UserInformationException(Strings.Jottacloud.NoUsernameError, "JottaNoUsername");
             m_username = userinfo.Username;

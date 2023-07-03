@@ -28,7 +28,7 @@ namespace Duplicati.Library.Backend.Mega
 {
     // ReSharper disable once UnusedMember.Global
     // This class is instantiated dynamically in the BackendLoader.
-    public class MegaBackend: IBackend, IStreamingBackend
+    public class MegaBackend : IBackend, IRenameEnabledBackend
     {
         private readonly string m_username = null;
         private readonly string m_password = null;
@@ -88,13 +88,17 @@ namespace Duplicati.Library.Backend.Mega
             m_prefix = uri.HostAndPath ?? "";
         }
 
-        private void GetCurrentFolder(bool autocreate = false)
+        private async Task GetCurrentFolderAsync(CancellationToken cancelToken, bool autocreate = false)
         {
             var parts = m_prefix.Split(new string[] { "/" }, StringSplitOptions.RemoveEmptyEntries);
-            var nodes = Client.GetNodes();
+            var nodes = await Client.GetNodesAsync();
+
+            // Client does not support CancellationToken, so we possibly cancel after each request
+            cancelToken.ThrowIfCancellationRequested();
+
             INode parent = nodes.First(x => x.Type == NodeType.Root);
 
-            foreach(var n in parts)
+            foreach (var n in parts)
             {
                 var item = nodes.FirstOrDefault(x => x.Name == n && x.Type == NodeType.Directory && x.ParentId == parent.Id);
                 if (item == null)
@@ -102,7 +106,8 @@ namespace Duplicati.Library.Backend.Mega
                     if (!autocreate)
                         throw new FolderMissingException();
 
-                    item = Client.CreateFolder(n, parent);
+                    item = await Client.CreateFolderAsync(n, parent);
+                    cancelToken.ThrowIfCancellationRequested();
                 }
 
                 parent = item;
@@ -110,7 +115,7 @@ namespace Duplicati.Library.Backend.Mega
 
             m_currentFolder = parent;
 
-            ResetFileCache(nodes);
+            await ResetFileCacheAsync(cancelToken, nodes);
         }
 
         private INode CurrentFolder
@@ -118,52 +123,63 @@ namespace Duplicati.Library.Backend.Mega
             get
             {
                 if (m_currentFolder == null)
-                    GetCurrentFolder(false);
+                    GetCurrentFolderAsync(CancellationToken.None, false).Wait();
 
                 return m_currentFolder;
             }
         }
 
-        private INode GetFileNode(string name)
+        private async Task<INode> GetFileNodeAsync(string name, CancellationToken cancelToken)
         {
             if (m_filecache != null && m_filecache.ContainsKey(name))
                 return m_filecache[name].OrderByDescending(x => x.ModificationDate).First();
 
-            ResetFileCache();
+            await ResetFileCacheAsync(cancelToken);
 
             if (m_filecache != null && m_filecache.ContainsKey(name))
                 return m_filecache[name].OrderByDescending(x => x.ModificationDate).First();
-            
+
             throw new FileMissingException();
         }
 
-        private void ResetFileCache(IEnumerable<INode> list = null)
+        private async Task ResetFileCacheAsync(CancellationToken cancelToken, IEnumerable<INode> list = null)
         {
             if (m_currentFolder == null)
             {
-                GetCurrentFolder(false);
+                await GetCurrentFolderAsync(cancelToken, false);
             }
             else
             {
-                m_filecache = 
+                m_filecache =
                     (list ?? Client.GetNodes()).Where(x => x.Type == NodeType.File && x.ParentId == CurrentFolder.Id)
                         .GroupBy(x => x.Name, x => x, (k, g) => new KeyValuePair<string, List<INode>>(k, g.ToList()))
                         .ToDictionary(x => x.Key, x => x.Value);
             }
         }
 
-        #region IStreamingBackend implementation
+        #region IBackend implementation
+
+        public async Task<IList<IFileEntry>> ListAsync(CancellationToken cancelToken)
+        {
+            if (m_filecache == null)
+                await ResetFileCacheAsync(cancelToken);
+
+            return
+                (from n in m_filecache.Values
+                 let item = n.OrderByDescending(x => x.ModificationDate).First()
+                 select (IFileEntry)new FileEntry(item.Name, item.Size, item.ModificationDate ?? new DateTime(0), item.ModificationDate ?? new DateTime(0))).ToList();
+        }
 
         public async Task PutAsync(string remotename, System.IO.Stream stream, CancellationToken cancelToken)
         {
             try
             {
                 if (m_filecache == null)
-                    ResetFileCache();
+                    await ResetFileCacheAsync(cancelToken);
 
                 var el = await Client.UploadAsync(stream, remotename, CurrentFolder, new Progress(), null, cancelToken);
                 if (m_filecache.ContainsKey(remotename))
-                    Delete(remotename);
+                    await DeleteAsync(remotename, cancelToken);
 
                 m_filecache[remotename] = new List<INode>();
                 m_filecache[remotename].Add(el);
@@ -175,51 +191,32 @@ namespace Duplicati.Library.Backend.Mega
             }
         }
 
-        public void Get(string remotename, System.IO.Stream stream)
+        public async Task GetAsync(string remotename, System.IO.Stream destination, CancellationToken cancelToken)
         {
-            using(var s = Client.Download(GetFileNode(remotename)))
-                Library.Utility.Utility.CopyStream(s, stream);
+            using (var s = await Client.DownloadAsync(
+                await GetFileNodeAsync(remotename, cancelToken),
+                cancellationToken: cancelToken))
+                Library.Utility.Utility.CopyStream(s, destination);
         }
 
-        #endregion
-
-        #region IBackend implementation
-
-        public IEnumerable<IFileEntry> List()
-        {
-            if (m_filecache == null)
-                ResetFileCache();
-            
-            return
-                from n in m_filecache.Values
-                let item = n.OrderByDescending(x => x.ModificationDate).First()
-                select new FileEntry(item.Name, item.Size, item.ModificationDate ?? new DateTime(0), item.ModificationDate ?? new DateTime(0));
-        }
-
-        public async Task PutAsync(string remotename, string filename, CancellationToken cancelToken)
-        {
-            using (System.IO.FileStream fs = System.IO.File.OpenRead(filename))
-                await PutAsync(remotename, fs, cancelToken);
-        }
-
-        public void Get(string remotename, string filename)
-        {
-            using (System.IO.FileStream fs = System.IO.File.Create(filename))
-                Get(remotename, fs);
-        }
-
-        public void Delete(string remotename)
+        public async Task DeleteAsync(string remotename, CancellationToken cancelToken)
         {
             try
             {
                 if (m_filecache == null || !m_filecache.ContainsKey(remotename))
-                    ResetFileCache();
+                    await ResetFileCacheAsync(cancelToken);
 
                 if (!m_filecache.ContainsKey(remotename))
                     throw new FileMissingException();
 
-                foreach(var n in m_filecache[remotename])
-                    Client.Delete(n, false);
+                // Client does not support CancellationToken, so we possibly cancel after each request
+                cancelToken.ThrowIfCancellationRequested();
+
+                foreach (var n in m_filecache[remotename])
+                {
+                    await Client.DeleteAsync(n, false);
+                    cancelToken.ThrowIfCancellationRequested();
+                }
 
                 m_filecache.Remove(remotename);
             }
@@ -230,14 +227,12 @@ namespace Duplicati.Library.Backend.Mega
             }
         }
 
-        public void Test()
-        {
-            this.TestList();
-        }
+        public Task TestAsync(CancellationToken cancelToken)
+            => this.TestListAsync(cancelToken);
 
-        public void CreateFolder()
+        public Task CreateFolderAsync(CancellationToken cancelToken)
         {
-            GetCurrentFolder(true);
+            return GetCurrentFolderAsync(cancelToken, true);
         }
 
         public string DisplayName
@@ -279,6 +274,44 @@ namespace Duplicati.Library.Backend.Mega
         public string[] DNSName
         {
             get { return null; }
+        }
+
+        public bool SupportsStreaming => true;
+
+        #endregion
+        #region IRenameEnabledBackend Members
+
+        public async Task RenameAsync(string oldname, string newname, CancellationToken cancelToken)
+        {
+            try
+            {
+                if (m_filecache == null || !m_filecache.ContainsKey(oldname))
+                    await ResetFileCacheAsync(cancelToken);
+
+                if (!m_filecache.ContainsKey(oldname))
+                    throw new FileMissingException();
+
+                // Delete target if exists (consistent with FileBackend rename)
+                if (m_filecache.ContainsKey(newname))
+                    await DeleteAsync(newname, cancelToken);
+
+                // Client does not support CancellationToken, so we possibly cancel after each request
+                cancelToken.ThrowIfCancellationRequested();
+
+                foreach (var n in m_filecache[oldname])
+                {
+                    await Client.RenameAsync(n, newname);
+                    cancelToken.ThrowIfCancellationRequested();
+                }
+
+                m_filecache[newname] = m_filecache[oldname];
+                m_filecache.Remove(oldname);
+            }
+            catch
+            {
+                m_filecache = null;
+                throw;
+            }
         }
 
         #endregion
