@@ -24,6 +24,7 @@ using Duplicati.Library.Common.IO;
 using Duplicati.Library.Interface;
 using Renci.SshNet;
 using Renci.SshNet.Common;
+using Renci.SshNet.Sftp;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -34,7 +35,7 @@ using System.Threading.Tasks;
 
 namespace Duplicati.Library.Backend
 {
-    public class SSHv2 : IStreamingBackend, IRenameEnabledBackend
+    public class SSHv2 : IBackend, IBackendPagination, IRenameEnabledBackend
     {
         private const string SSH_KEYFILE_OPTION = "ssh-keyfile";
         private const string SSH_KEYFILE_INLINE = "ssh-key";
@@ -57,6 +58,7 @@ namespace Duplicati.Library.Backend
 
         private readonly int m_port = 22;
 
+        // TODO: A future release of SSH.NET will have async methods
         private SftpClient m_con;
 
         private static readonly bool supportsECDSA;
@@ -136,20 +138,24 @@ namespace Duplicati.Library.Backend
 
         #region IBackend Members
 
-        public void Test()
-        {
-            this.TestList();
-        }
+        public Task<IList<IFileEntry>> ListAsync(CancellationToken cancelToken)
+            => this.CondensePaginatedListAsync(cancelToken);
 
-        public void CreateFolder()
+        public Task TestAsync(CancellationToken cancelToken)
+            => this.TestListAsync(cancelToken);
+
+        public async Task CreateFolderAsync(CancellationToken cancelToken)
         {
-            CreateConnection();
+            await CreateConnectionAsync(cancelToken);
 
             // Since the SftpClient.CreateDirectory method does not create all the parent directories
             // as needed, this has to be done manually.
             string partialPath = String.Empty;
             foreach (string part in m_path.Split('/').Where(x => !String.IsNullOrEmpty(x)))
             {
+                // Cancel early if requested
+                cancelToken.ThrowIfCancellationRequested();
+
                 partialPath += $"/{part}";
                 if (this.m_con.Exists(partialPath))
                 {
@@ -169,25 +175,48 @@ namespace Duplicati.Library.Backend
 
         public string ProtocolKey => "ssh";
 
-        public async Task PutAsync(string remotename, string filename, CancellationToken cancelToken)
+        public async Task PutAsync(string remotename, System.IO.Stream stream, CancellationToken cancelToken)
         {
-            using (System.IO.FileStream fs = System.IO.File.Open(filename, System.IO.FileMode.Open,
-                System.IO.FileAccess.Read, System.IO.FileShare.Read))
-                await PutAsync(remotename, fs, cancelToken);
+            await CreateConnectionAsync(cancelToken);
+            ChangeDirectory(m_path);
+
+            // TODO: Use async method once available
+            var ares = m_con.BeginUploadFile(stream, remotename, null, null);
+            while (!ares.IsCompleted)
+            {
+                // This probably leaves the operation running in the background if canceled, but a quick stop is probably desired
+                await Task.Delay(100, cancelToken);
+            }
+            m_con.EndUploadFile(ares);
         }
 
-        public void Get(string remotename, string filename)
-        {
-            using (System.IO.FileStream fs = System.IO.File.Open(filename, System.IO.FileMode.Create,
-                System.IO.FileAccess.Write, System.IO.FileShare.None))
-                Get(remotename, fs);
-        }
-
-        public void Delete(string remotename)
+        public async Task GetAsync(string remotename, System.IO.Stream destination, CancellationToken cancelToken)
         {
             try
             {
-                CreateConnection();
+                await CreateConnectionAsync(cancelToken);
+                ChangeDirectory(m_path);
+
+                // TODO: Use async method once available
+                var ares = m_con.BeginDownloadFile(remotename, destination, null, null);
+                while (!ares.IsCompleted)
+                {
+                    // This probably leaves the operation running in the background if canceled, but a quick stop is probably desired
+                    await Task.Delay(100, cancelToken);
+                }
+                m_con.EndDownloadFile(ares);
+            }
+            catch (SftpPathNotFoundException ex)
+            {
+                throw new FileMissingException(ex);
+            }
+        }
+
+        public async Task DeleteAsync(string remotename, CancellationToken cancelToken)
+        {
+            try
+            {
+                await CreateConnectionAsync(cancelToken);
                 ChangeDirectory(m_path);
                 m_con.DeleteFile(remotename);
             }
@@ -259,46 +288,56 @@ namespace Duplicati.Library.Backend
 
         #endregion
 
-        #region IStreamingBackend Implementation
+        #region IBackendPagination Implementation
 
-        public Task PutAsync(string remotename, System.IO.Stream stream, CancellationToken cancelToken)
+        public async IAsyncEnumerable<IFileEntry> ListEnumerableAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancelToken)
         {
-            CreateConnection();
-            ChangeDirectory(m_path);
-            m_con.UploadFile(stream, remotename);
-            return Task.FromResult(true);
-        }
+            string path = ".";
 
-        public void Get(string remotename, System.IO.Stream stream)
-        {
-            CreateConnection();
+            await CreateConnectionAsync(cancelToken);
             ChangeDirectory(m_path);
-            m_con.DownloadFile(remotename, stream);
+
+            // TODO: Use async method once available
+            var ares = m_con.BeginListDirectory(path, null, null);
+            while (!ares.IsCompleted)
+            {
+                // This probably leaves the operation running in the background if canceled, but a quick stop is probably desired
+                await Task.Delay(100, cancelToken);
+            }
+            IEnumerable<SftpFile> files = m_con.EndListDirectory(ares);
+            foreach (var ls in files)
+            {
+                if (ls.Name.ToString() == "." || ls.Name.ToString() == "..") continue;
+                yield return new FileEntry(ls.Name, ls.Length,
+                    ls.LastAccessTime, ls.LastWriteTime)
+                { IsFolder = ls.Attributes.IsDirectory };
+            }
         }
 
         #endregion
 
         #region IRenameEnabledBackend Implementation
 
-        public void Rename(string source, string target)
+        public async Task RenameAsync(string oldname, string newname, CancellationToken cancelToken)
         {
-            CreateConnection();
+            await CreateConnectionAsync(cancelToken);
             ChangeDirectory(m_path);
-            m_con.RenameFile(source, target);
+            cancelToken.ThrowIfCancellationRequested();
+            m_con.RenameFile(oldname, newname);
         }
 
         #endregion
 
         #region Implementation
 
-        private void CreateConnection()
+        private async Task CreateConnectionAsync(CancellationToken cancelToken)
         {
             if (m_con != null && m_con.IsConnected)
                 return;
 
             if (m_con != null && !m_con.IsConnected)
             {
-                this.TryConnect(m_con);
+                await this.TryConnectAsync(m_con, cancelToken).ConfigureAwait(false);
                 return;
             }
 
@@ -353,12 +392,12 @@ namespace Duplicati.Library.Backend
             if (m_keepaliveinterval.Ticks != 0)
                 con.KeepAliveInterval = m_keepaliveinterval;
 
-            this.TryConnect(con);
+            await this.TryConnectAsync(con, cancelToken).ConfigureAwait(false);
 
             m_con = con;
         }
 
-        private void TryConnect(SftpClient client)
+        private Task TryConnectAsync(SftpClient client, CancellationToken cancelToken)
         {
             if (!SSHv2.supportsECDSA)
             {
@@ -369,7 +408,9 @@ namespace Duplicati.Library.Backend
                 }
             }
 
+            // TODO: Use ConnectAsync once available
             client.Connect();
+            return Task.CompletedTask;
         }
 
         private void ChangeDirectory(string path)
@@ -389,21 +430,6 @@ namespace Duplicati.Library.Backend
             {
                 throw new Interface.FolderMissingException(
                     Strings.SSHv2Backend.FolderNotFoundManagedError(path, ex.Message), ex);
-            }
-        }
-
-        public IEnumerable<IFileEntry> List()
-        {
-            string path = ".";
-
-            CreateConnection();
-            ChangeDirectory(m_path);
-
-            foreach (var ls in m_con.ListDirectory(path))
-            {
-                if (ls.Name.ToString() == "." || ls.Name.ToString() == "..") continue;
-                yield return new FileEntry(ls.Name, ls.Length,
-                    ls.LastAccessTime, ls.LastWriteTime) {IsFolder = ls.Attributes.IsDirectory};
             }
         }
 
@@ -447,7 +473,9 @@ namespace Duplicati.Library.Backend
 
         public string[] DNSName
         {
-            get { return new[] {m_server}; }
+            get { return new[] { m_server }; }
         }
+
+        public bool SupportsStreaming => true;
     }
 }

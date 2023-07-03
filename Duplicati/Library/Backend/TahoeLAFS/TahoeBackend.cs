@@ -19,21 +19,24 @@
 #endregion
 using Duplicati.Library.Common.IO;
 using Duplicati.Library.Interface;
+using Duplicati.Library.Utility;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Net;
+using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace Duplicati.Library.Backend
 {
-    public class TahoeBackend : IBackend, IStreamingBackend
+    public class TahoeBackend : IBackend, IBackendPagination
     {
         private readonly string m_url;
         private readonly bool m_useSSL = false;
         private readonly byte[] m_copybuffer = new byte[Duplicati.Library.Utility.Utility.DEFAULT_BUFFER_SIZE];
+        private readonly HttpClient m_client;
 
         private class TahoeEl
         {
@@ -81,7 +84,7 @@ namespace Duplicati.Library.Backend
                     else if (token.Type == JTokenType.Object)
                         node = token.ToObject<TahoeNode>(serializer);
 
-                return new TahoeEl() { nodetype = nodetype,  node = node };
+                return new TahoeEl() { nodetype = nodetype, node = node };
             }
 
             public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
@@ -100,7 +103,7 @@ namespace Duplicati.Library.Backend
             //Validate URL
             var u = new Utility.Uri(url);
             u.RequireHost();
-            
+
             if (!u.Path.StartsWith("uri/URI:DIR2:", StringComparison.Ordinal) && !u.Path.StartsWith("uri/URI%3ADIR2%3A", StringComparison.Ordinal))
                 throw new UserInformationException(Strings.TahoeBackend.UnrecognizedUriError, "TahoeInvalidUri");
 
@@ -108,31 +111,30 @@ namespace Duplicati.Library.Backend
 
             m_url = u.SetScheme(m_useSSL ? "https" : "http").SetQuery(null).SetCredentials(null, null).ToString();
             m_url = Util.AppendDirSeparator(m_url, "/");
+
+            // Disable cookies to prevent unexpected behavior
+            m_client = new HttpClient(new HttpClientHandler() { UseCookies = false })
+            {
+                BaseAddress = new System.Uri(m_url)
+            };
+            m_client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "Duplicati Tahoe-LAFS Client v" + System.Reflection.Assembly.GetExecutingAssembly().GetName().Version);
+            // Disable keep-alive
+            m_client.DefaultRequestHeaders.ConnectionClose = true;
         }
 
-        private System.Net.HttpWebRequest CreateRequest(string remotename, string queryparams)
+        private string CreateRequestUri(string remotename, string queryparams)
         {
-            System.Net.HttpWebRequest req = (System.Net.HttpWebRequest)System.Net.HttpWebRequest.Create(m_url + (Library.Utility.Uri.UrlEncode(remotename).Replace("+", "%20")) + (string.IsNullOrEmpty(queryparams) || queryparams.Trim().Length == 0 ? "" : "?" + queryparams));
-
-            req.KeepAlive = false;
-            req.UserAgent = "Duplicati Tahoe-LAFS Client v" + System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
-
-            return req;
+            return (Library.Utility.Uri.UrlEncode(remotename, spacevalue: "%20") + (string.IsNullOrEmpty(queryparams) || queryparams.Trim().Length == 0 ? "" : "?" + queryparams));
         }
 
         #region IBackend Members
 
-        public void Test()
-        {
-            this.TestList();
-        }
+        public Task TestAsync(CancellationToken cancelToken)
+            => this.TestListAsync(cancelToken);
 
-        public void CreateFolder()
+        public async Task CreateFolderAsync(CancellationToken cancelToken)
         {
-            System.Net.HttpWebRequest req = CreateRequest("", "t=mkdir");
-            req.Method = System.Net.WebRequestMethods.Http.Post;
-            Utility.AsyncHttpRequest areq = new Utility.AsyncHttpRequest(req);
-            using (areq.GetResponse())
+            using (await m_client.PostAsync(CreateRequestUri("", "t=mkdir"), null, cancelToken))
             { }
         }
 
@@ -146,45 +148,122 @@ namespace Duplicati.Library.Backend
             get { return "tahoe"; }
         }
 
-        public IEnumerable<IFileEntry> List()
+        public Task<IList<IFileEntry>> ListAsync(CancellationToken cancelToken)
+            => this.CondensePaginatedListAsync(cancelToken);
+
+
+        public async Task PutAsync(string remotename, System.IO.Stream stream, CancellationToken cancelToken)
         {
-            TahoeEl data;
-
-            try
+            using (var content = new StreamContent(stream))
             {
-                var req = CreateRequest("", "t=json");
-                req.Method = System.Net.WebRequestMethods.Http.Get;
-
-                var areq = new Utility.AsyncHttpRequest(req);
-                using (System.Net.HttpWebResponse resp = (System.Net.HttpWebResponse)areq.GetResponse())
+                try { content.Headers.ContentLength = stream.Length; } catch { }
+                // TODO: why not application/octet-stream?
+                content.Headers.ContentType = System.Net.Http.Headers.MediaTypeHeaderValue.Parse("application/binary");
+                using (var resp = await m_client.PutAsync(CreateRequestUri(remotename, ""), content, cancelToken).ConfigureAwait(false))
                 {
-                    int code = (int)resp.StatusCode;
-                    if (code < 200 || code >= 300) //For some reason Mono does not throw this automatically
-                        throw new System.Net.WebException(resp.StatusDescription, null, System.Net.WebExceptionStatus.ProtocolError, resp);
-
-                    using (var rs = areq.GetResponseStream())
-                    using (var sr = new System.IO.StreamReader(rs))
-                    using (var jr = new Newtonsoft.Json.JsonTextReader(sr))
+                    if (resp.StatusCode == HttpStatusCode.Conflict || resp.StatusCode == HttpStatusCode.NotFound)
                     {
-                        var jsr  =new Newtonsoft.Json.JsonSerializer();
-                        jsr.Converters.Add(new TahoeElConverter());
-                        data = jsr.Deserialize<TahoeEl>(jr);
+                        throw new FolderMissingException(Strings.TahoeBackend.MissingFolderError(m_url, resp.ReasonPhrase));
+                    }
+                    else if (!resp.IsSuccessStatusCode)
+                    {
+                        throw new HttpRequestStatusException(resp);
                     }
                 }
             }
-            catch (System.Net.WebException wex)
-            {
-                //Convert to better exception
-                if (wex.Response as System.Net.HttpWebResponse != null)
-                    if ((wex.Response as System.Net.HttpWebResponse).StatusCode == System.Net.HttpStatusCode.Conflict || (wex.Response as System.Net.HttpWebResponse).StatusCode == System.Net.HttpStatusCode.NotFound)
-                        throw new Interface.FolderMissingException(Strings.TahoeBackend.MissingFolderError(m_url, wex.Message), wex);
+        }
 
-                throw;
+        public async Task GetAsync(string remotename, System.IO.Stream destination, CancellationToken cancelToken)
+        {
+            using (var resp = await m_client.GetAsync(CreateRequestUri(remotename, ""), cancelToken).ConfigureAwait(false))
+            {
+                if (!resp.IsSuccessStatusCode)
+                {
+                    throw new HttpRequestStatusException(resp);
+                }
+
+                using (var s = await resp.Content.ReadAsStreamAsync().ConfigureAwait(false))
+                    Utility.Utility.CopyStream(s, destination, true, m_copybuffer);
+            }
+        }
+
+        public async Task DeleteAsync(string remotename, CancellationToken cancelToken)
+        {
+            using (var resp = await m_client.DeleteAsync(CreateRequestUri(remotename, ""), cancelToken))
+            {
+                if (resp.StatusCode == HttpStatusCode.NotFound)
+                {
+                    throw new FileMissingException(resp.ReasonPhrase);
+                }
+                else if (!resp.IsSuccessStatusCode)
+                {
+                    throw new HttpRequestStatusException(resp);
+                }
+            }
+        }
+
+        public IList<ICommandLineArgument> SupportedCommands
+        {
+            get
+            {
+                return new List<ICommandLineArgument>(new ICommandLineArgument[] {
+                    new CommandLineArgument("use-ssl", CommandLineArgument.ArgumentType.Boolean, Strings.TahoeBackend.DescriptionUseSSLShort, Strings.TahoeBackend.DescriptionUseSSLLong),
+                });
+            }
+        }
+
+        public string Description
+        {
+            get { return Strings.TahoeBackend.Description; }
+        }
+
+        public string[] DNSName
+        {
+            get { return new string[] { new System.Uri(m_url).Host }; }
+        }
+
+        public bool SupportsStreaming => true;
+
+        #endregion
+
+        #region IDisposable Members
+
+        public void Dispose()
+        {
+            m_client.Dispose();
+        }
+
+        #endregion
+
+        #region IBackendPagination Members
+
+        public async IAsyncEnumerable<IFileEntry> ListEnumerableAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancelToken)
+        {
+            TahoeEl data;
+
+            using (var resp = await m_client.GetAsync(CreateRequestUri("", "t=json"), cancelToken).ConfigureAwait(false))
+            {
+                if (resp.StatusCode == HttpStatusCode.Conflict || resp.StatusCode == HttpStatusCode.NotFound)
+                {
+                    throw new FolderMissingException(Strings.TahoeBackend.MissingFolderError(m_url, resp.ReasonPhrase));
+                }
+                else if (!resp.IsSuccessStatusCode)
+                {
+                    throw new HttpRequestStatusException(resp);
+                }
+                using (var rs = await resp.Content.ReadAsStreamAsync().ConfigureAwait(false))
+                using (var sr = new System.IO.StreamReader(rs))
+                using (var jr = new Newtonsoft.Json.JsonTextReader(sr))
+                {
+                    var jsr = new Newtonsoft.Json.JsonSerializer();
+                    jsr.Converters.Add(new TahoeElConverter());
+                    data = jsr.Deserialize<TahoeEl>(jr);
+                }
             }
 
             if (data == null || data.node == null || data.nodetype != "dirnode")
                 throw new Exception("Invalid folder listing response");
-                
+
             foreach (var e in data.node.children)
             {
                 if (e.Value == null || e.Value.node == null)
@@ -200,125 +279,12 @@ namespace Duplicati.Library.Backend
                 fe.IsFolder = isDir;
 
                 if (e.Value.node.metadata != null && e.Value.node.metadata.tahoe != null)
-                    fe.LastModification = Duplicati.Library.Utility.Utility.EPOCH + TimeSpan.FromSeconds(e.Value.node.metadata.tahoe.linkmotime);
-                
+                    fe.LastModification = Library.Utility.Utility.EPOCH + TimeSpan.FromSeconds(e.Value.node.metadata.tahoe.linkmotime);
+
                 if (isFile)
-                    fe.Size = e.Value.node.size;                
+                    fe.Size = e.Value.node.size;
 
                 yield return fe;
-            }
-        }
-
-        public async Task PutAsync(string remotename, string filename, CancellationToken cancelToken)
-        {
-            using (System.IO.FileStream fs = System.IO.File.OpenRead(filename))
-                await PutAsync(remotename, fs, cancelToken);
-        }
-
-        public void Get(string remotename, string filename)
-        {
-            using (System.IO.FileStream fs = System.IO.File.Create(filename))
-                Get(remotename, fs);
-        }
-
-        public void Delete(string remotename)
-        {
-            try
-            {
-                System.Net.HttpWebRequest req = CreateRequest(remotename, "");
-                req.Method = "DELETE";
-                Utility.AsyncHttpRequest areq = new Utility.AsyncHttpRequest(req);
-                using (areq.GetResponse())
-                { }
-            }
-            catch (System.Net.WebException wex)
-            {
-                if (wex.Response is HttpWebResponse response && response.StatusCode == System.Net.HttpStatusCode.NotFound)
-                    throw new FileMissingException(wex);
-                else
-                    throw;
-            }
-        }
-
-        public IList<ICommandLineArgument> SupportedCommands
-        {
-            get 
-            {
-                return new List<ICommandLineArgument>(new ICommandLineArgument[] {
-                    new CommandLineArgument("use-ssl", CommandLineArgument.ArgumentType.Boolean, Strings.TahoeBackend.DescriptionUseSSLShort, Strings.TahoeBackend.DescriptionUseSSLLong),
-                });
-            }
-        }
-
-        public string Description
-        {
-            get { return Strings.TahoeBackend.Description; }
-        }
-
-        public string[] DNSName
-        {
-            get { return new string[] { new Uri(m_url).Host }; }
-        }
-
-        #endregion
-
-        #region IDisposable Members
-
-        public void Dispose()
-        {
-        }
-
-        #endregion
-
-        #region IStreamingBackend Members
-
-        public async Task PutAsync(string remotename, System.IO.Stream stream, CancellationToken cancelToken)
-        {
-            try
-            {
-                System.Net.HttpWebRequest req = CreateRequest(remotename, "");
-                req.Method = System.Net.WebRequestMethods.Http.Put;
-                req.ContentType = "application/binary";
-
-                try { req.ContentLength = stream.Length; }
-                catch { }
-
-                Utility.AsyncHttpRequest areq = new Utility.AsyncHttpRequest(req);
-                using (System.IO.Stream s = areq.GetRequestStream())
-                    await Utility.Utility.CopyStreamAsync(stream, s, true, cancelToken, m_copybuffer);
-
-                using (System.Net.HttpWebResponse resp = (System.Net.HttpWebResponse)areq.GetResponse())
-                {
-                    int code = (int)resp.StatusCode;
-                    if (code < 200 || code >= 300) //For some reason Mono does not throw this automatically
-                        throw new System.Net.WebException(resp.StatusDescription, null, System.Net.WebExceptionStatus.ProtocolError, resp);
-                }
-            }
-            catch (System.Net.WebException wex)
-            {
-                //Convert to better exception
-                if (wex.Response as System.Net.HttpWebResponse != null)
-                    if ((wex.Response as System.Net.HttpWebResponse).StatusCode == System.Net.HttpStatusCode.Conflict || (wex.Response as System.Net.HttpWebResponse).StatusCode == System.Net.HttpStatusCode.NotFound)
-                        throw new Interface.FolderMissingException(Strings.TahoeBackend.MissingFolderError(m_url, wex.Message), wex);
-
-                throw;
-            }
-        }
-
-        public void Get(string remotename, System.IO.Stream stream)
-        {
-            var req = CreateRequest(remotename, "");
-            req.Method = System.Net.WebRequestMethods.Http.Get;
-
-            var areq = new Utility.AsyncHttpRequest(req);
-            using (var resp = (System.Net.HttpWebResponse)areq.GetResponse())
-            {
-                int code = (int)resp.StatusCode;
-                if (code < 200 || code >= 300) //For some reason Mono does not throw this automatically
-                    throw new System.Net.WebException(resp.StatusDescription, null, System.Net.WebExceptionStatus.ProtocolError, resp);
-
-                using (var s = areq.GetResponseStream())
-                    Utility.Utility.CopyStream(s, stream, true, m_copybuffer);
             }
         }
 

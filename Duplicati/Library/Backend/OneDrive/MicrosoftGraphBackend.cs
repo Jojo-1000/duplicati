@@ -603,7 +603,7 @@ namespace Duplicati.Library.Backend
                                         remotename,
                                         delay);
 
-                                    await Task.Delay(delay).ConfigureAwait(false);
+                                    await Task.Delay(delay, cancelToken).ConfigureAwait(false);
                                     continue;
                                 }
                                 else if (ex.StatusCode == HttpStatusCode.NotFound)
