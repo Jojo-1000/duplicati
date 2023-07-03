@@ -32,7 +32,7 @@ namespace Duplicati.Library.Backend.GoogleDrive
 {
     // ReSharper disable once UnusedMember.Global
     // This class is instantiated dynamically in the BackendLoader.
-    public class GoogleDrive : IBackend, IStreamingBackend, IQuotaEnabledBackend, IRenameEnabledBackend
+    public class GoogleDrive : IBackend, IBackendPagination, IQuotaEnabledBackend, IRenameEnabledBackend
     {
         private const string AUTHID_OPTION = "authid";
         private const string TEAMDRIVE_ID = "googledrive-teamdrive-id";
@@ -66,23 +66,32 @@ namespace Duplicati.Library.Backend.GoogleDrive
             m_filecache = new Dictionary<string, GoogleDriveFolderItem[]>();
         }
 
-        private string GetFolderId(string path, bool autocreate = false)
+        private async Task<string> GetFolderIdAsync(string path, CancellationToken cancelToken, bool autocreate = false)
         {
             var curparent = m_teamDriveID ?? GetAboutInfo().rootFolderId;
             var curdisplay = new StringBuilder("/");
 
             foreach (var p in path.Split(new char[] { '/' }, StringSplitOptions.RemoveEmptyEntries))
             {
-                var res = ListFolder(curparent, true, p).ToArray();
+                var res = new List<GoogleDriveFolderItem>();
+                await foreach (var i in ListFolderAsync(curparent, cancelToken, true, p))
+                {
+                    res.Add(i);
+                    if (res.Count > 1)
+                    {
+                        // Do not need to list all folders, more than one is an error
+                        break;
+                    }
+                }
 
-                if (res.Length == 0)
+                if (res.Count == 0)
                 {
                     if (!autocreate)
                         throw new FolderMissingException();
 
-                    curparent = CreateFolder(p, curparent).id;
+                    curparent = (await CreateFolderAsync(p, curparent, cancelToken)).id;
                 }
-                else if (res.Length > 1)
+                else if (res.Count > 1)
                 {
                     throw new UserInformationException(Strings.GoogleDrive.MultipleEntries(p, curdisplay.ToString()), "GoogleDriveMultipleEntries");
                 }
@@ -102,13 +111,13 @@ namespace Duplicati.Library.Backend.GoogleDrive
             get
             {
                 if (string.IsNullOrEmpty(m_currentFolderId))
-                    m_currentFolderId = GetFolderId(m_path);
+                    m_currentFolderId = GetFolderIdAsync(m_path, CancellationToken.None).Result;
 
                 return m_currentFolderId;
             }
         }
 
-        private GoogleDriveFolderItem[] GetFileEntries(string remotename, bool throwMissingException = true)
+        private async Task<GoogleDriveFolderItem[]> GetFileEntriesAsync(string remotename, CancellationToken cancelToken, bool throwMissingException = true)
         {
             GoogleDriveFolderItem[] entries;
             m_filecache.TryGetValue(remotename, out entries);
@@ -116,7 +125,12 @@ namespace Duplicati.Library.Backend.GoogleDrive
             if (entries != null)
                 return entries;
 
-            entries = ListFolder(CurrentFolderId, false, remotename).ToArray();
+
+            var lst = new List<GoogleDriveFolderItem>();
+            await foreach (var i in ListFolderAsync(CurrentFolderId, cancelToken, false, remotename))
+                lst.Add(i);
+
+            entries = lst.ToArray();
 
             if (entries == null || entries.Length == 0)
             {
@@ -134,7 +148,7 @@ namespace Duplicati.Library.Backend.GoogleDrive
             return title.Replace("'", "\\'");
         }
 
-        #region IStreamingBackend implementation
+        #region IBackend implementation
 
         public async Task PutAsync(string remotename, System.IO.Stream stream, CancellationToken cancelToken)
         {
@@ -142,7 +156,7 @@ namespace Duplicati.Library.Backend.GoogleDrive
             {
                 // Figure out if we update or create the file
                 if (m_filecache.Count == 0)
-                    foreach (var file in List()) { /* Enumerate the full listing */ }
+                    await foreach (var file in ListEnumerableAsync(cancelToken)) { /* Enumerate the full listing */ }
 
                 GoogleDriveFolderItem[] files;
                 m_filecache.TryGetValue(remotename, out files);
@@ -153,7 +167,7 @@ namespace Duplicati.Library.Backend.GoogleDrive
                     if (files.Length == 1)
                         fileId = files[0].id;
                     else
-                        Delete(remotename);
+                        await DeleteAsync(remotename, cancelToken);
                 }
 
                 var isUpdate = !string.IsNullOrWhiteSpace(fileId);
@@ -180,102 +194,46 @@ namespace Duplicati.Library.Backend.GoogleDrive
             }
         }
 
-        public void Get(string remotename, System.IO.Stream stream)
+        public Task<IList<IFileEntry>> ListAsync(CancellationToken cancelToken)
+            => this.CondensePaginatedListAsync(cancelToken);
+
+        public async Task GetAsync(string remotename, Stream destination, CancellationToken cancelToken)
         {
             // Prevent repeated download url lookups
             if (m_filecache.Count == 0)
-                foreach (var file in List()) { /* Enumerate the full listing */ }
+                await foreach (var file in ListEnumerableAsync(cancelToken)) { /* Enumerate the full listing */ }
 
-            var fileId = GetFileEntries(remotename).OrderByDescending(x => x.createdDate).First().id;
+            var fileId = (await GetFileEntriesAsync(remotename, cancelToken)).OrderByDescending(x => x.createdDate).First().id;
 
-            var req = m_oauth.CreateRequest(WebApi.GoogleDrive.GetUrl(fileId));
-            var areq = new AsyncHttpRequest(req);
-            using (var resp = (HttpWebResponse)areq.GetResponse())
-            using (var rs = areq.GetResponseStream())
-                Duplicati.Library.Utility.Utility.CopyStream(rs, stream);
-        }
-
-        #endregion
-
-        #region IBackend implementation
-
-        public IEnumerable<IFileEntry> List()
-        {
-            bool success = false;
-            try
-            {
-                m_filecache.Clear();
-
-                // For now, this class assumes that List() fully populates the file cache
-                foreach (var n in ListFolder(CurrentFolderId))
+            var req = await m_oauth.CreateRequestAsync(WebApi.GoogleDrive.GetUrl(fileId), "GET", cancelToken);
+            using (var resp = await m_oauth.GetResponseAsync(req, null, cancelToken))
+                if (resp.StatusCode == HttpStatusCode.NotFound)
                 {
-                    FileEntry fe = null;
-
-                    if (n.fileSize == null)
-                        fe = new FileEntry(n.title);
-                    else if (n.modifiedDate == null)
-                        fe = new FileEntry(n.title, n.fileSize.Value);
-                    else
-                        fe = new FileEntry(n.title, n.fileSize.Value, n.modifiedDate.Value, n.modifiedDate.Value);
-
-                    if (fe != null)
-                    {
-                        fe.IsFolder = FOLDER_MIMETYPE.Equals(n.mimeType, StringComparison.OrdinalIgnoreCase);
-
-                        if (!fe.IsFolder)
-                        {
-                            GoogleDriveFolderItem[] lst;
-                            if (!m_filecache.TryGetValue(fe.Name, out lst))
-                            {
-                                m_filecache[fe.Name] = new GoogleDriveFolderItem[] { n };
-                            }
-                            else
-                            {
-                                Array.Resize(ref lst, lst.Length + 1);
-                                lst[lst.Length - 1] = n;
-                            }
-                        }
-
-                        yield return fe;
-                    }
+                    throw new FileMissingException();
                 }
-
-                success = true;
-            }
-            finally
-            {
-                // If the enumeration either failed or didn't complete, clear the file cache.
-                // This way, other operations which require a fully populated file cache will see an empty one and can populate it themselves.
-                if (!success)
+                else if (!resp.IsSuccessStatusCode)
                 {
-                    m_filecache.Clear();
+                    throw new HttpRequestStatusException(resp);
                 }
-            }
+                else
+                {
+                    using (var rs = await resp.Content.ReadAsStreamAsync())
+                        Library.Utility.Utility.CopyStream(rs, destination);
+                }
         }
 
-        public async Task PutAsync(string remotename, string filename, CancellationToken cancelToken)
-        {
-            using (System.IO.FileStream fs = System.IO.File.OpenRead(filename))
-                await PutAsync(remotename, fs, cancelToken);
-        }
-
-        public void Get(string remotename, string filename)
-        {
-            using (System.IO.FileStream fs = System.IO.File.Create(filename))
-                Get(remotename, fs);
-        }
-
-        public void Delete(string remotename)
+        public async Task DeleteAsync(string remotename, CancellationToken cancelToken)
         {
             try
             {
-                foreach (var fileid in from n in GetFileEntries(remotename) select n.id)
+                foreach (var fileid in from n in await GetFileEntriesAsync(remotename, cancelToken)
+                                       select n.id)
                 {
                     var url = WebApi.GoogleDrive.DeleteUrl(Library.Utility.Uri.UrlPathEncode(fileid), m_teamDriveID);
-                    m_oauth.GetJSONData<object>(url, x =>
+                    await m_oauth.GetJSONDataAsync<object>(url, x =>
                     {
-                        x.Method = "DELETE";
-                    });
+                        x.Method = System.Net.Http.HttpMethod.Delete;
+                    }, cancelToken);
                 }
 
                 m_filecache.Remove(remotename);
@@ -288,15 +246,19 @@ namespace Duplicati.Library.Backend.GoogleDrive
             }
         }
 
-        public void Test()
-        {
-            this.TestList();
-        }
+        public Task TestAsync(CancellationToken cancelToken)
+            => this.TestListAsync(cancelToken);
 
-        public void CreateFolder()
+        public async Task CreateFolderAsync(CancellationToken cancelToken)
         {
             m_filecache.Clear();
-            m_currentFolderId = GetFolderId(m_path, true);
+            m_currentFolderId = await GetFolderIdAsync(m_path, cancelToken, true);
+        }
+
+        public async Task PutAsync(string remotename, string filename, CancellationToken cancelToken)
+        {
+            using (System.IO.FileStream fs = System.IO.File.OpenRead(filename))
+                await PutAsync(remotename, fs, cancelToken);
         }
 
         public string DisplayName
@@ -358,25 +320,26 @@ namespace Duplicati.Library.Backend.GoogleDrive
             get { return WebApi.GoogleDrive.Hosts(); }
         }
 
+        public bool SupportsStreaming => true;
+
         #endregion
 
         #region IRenameEnabledBackend implementation
-        public void Rename(string oldname, string newname)
+
+        public async Task RenameAsync(string oldname, string newname, CancellationToken cancelToken)
         {
             try
             {
-                var files = GetFileEntries(oldname, true);
+                var files = await GetFileEntriesAsync(oldname, cancelToken, true);
                 if (files.Length > 1)
                     throw new UserInformationException(string.Format(Strings.GoogleDrive.MultipleEntries(oldname, m_path)),
                                                        "GoogleDriveMultipleEntries");
 
-                using (var cToken = new CancellationTokenSource())
-                {
-                    Stream stream = new MemoryStream();
-                    Get(oldname, stream);
-                    PutAsync(newname, stream, cToken.Token).Wait(cToken.Token);
-                    Delete(oldname);
-                }
+                // TODO: Use PATCH request with fileId to rename
+                Stream stream = new MemoryStream();
+                await GetAsync(oldname, stream, cancelToken);
+                await PutAsync(newname, stream, cancelToken);
+                await DeleteAsync(oldname, cancelToken);
 
                 m_filecache.Remove(oldname);
             }
@@ -389,6 +352,60 @@ namespace Duplicati.Library.Backend.GoogleDrive
 
         }
         #endregion
+
+        public async IAsyncEnumerable<IFileEntry> ListEnumerableAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancelToken)
+        {
+            bool success = false;
+            try
+            {
+                m_filecache.Clear();
+
+                // For now, this class assumes that List() fully populates the file cache
+                await foreach (var n in ListFolderAsync(CurrentFolderId, cancelToken))
+                {
+                    FileEntry fe = null;
+
+                    if (n.fileSize == null)
+                        fe = new FileEntry(n.title);
+                    else if (n.modifiedDate == null)
+                        fe = new FileEntry(n.title, n.fileSize.Value);
+                    else
+                        fe = new FileEntry(n.title, n.fileSize.Value, n.modifiedDate.Value, n.modifiedDate.Value);
+
+                    if (fe != null)
+                    {
+                        fe.IsFolder = FOLDER_MIMETYPE.Equals(n.mimeType, StringComparison.OrdinalIgnoreCase);
+
+                        if (!fe.IsFolder)
+                        {
+                            GoogleDriveFolderItem[] lst;
+                            if (!m_filecache.TryGetValue(fe.Name, out lst))
+                            {
+                                m_filecache[fe.Name] = new GoogleDriveFolderItem[] { n };
+                            }
+                            else
+                            {
+                                Array.Resize(ref lst, lst.Length + 1);
+                                lst[lst.Length - 1] = n;
+                            }
+                        }
+
+                        yield return fe;
+                    }
+                }
+
+                success = true;
+            }
+            finally
+            {
+                // If the enumeration either failed or didn't complete, clear the file cache.
+                // This way, other operations which require a fully populated file cache will see an empty one and can populate it themselves.
+                if (!success)
+                {
+                    m_filecache.Clear();
+                }
+            }
+        }
 
         #region IDisposable implementation
 
@@ -435,7 +452,7 @@ namespace Duplicati.Library.Backend.GoogleDrive
             public string rootFolderId { get; set; }
         }
 
-        private IEnumerable<GoogleDriveFolderItem> ListFolder(string parentfolder, bool? onlyFolders = null, string name = null)
+        private async IAsyncEnumerable<GoogleDriveFolderItem> ListFolderAsync(string parentfolder, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancelToken, bool? onlyFolders = null, string name = null)
         {
             var fileQuery = new string[] {
                 string.IsNullOrEmpty(name) ? null : string.Format("title = '{0}'", EscapeTitleEntries(name)),
@@ -449,7 +466,7 @@ namespace Duplicati.Library.Backend.GoogleDrive
 
             while (true)
             {
-                var res = m_oauth.GetJSONData<GoogleDriveListResponse>(url);
+                var res = await m_oauth.GetJSONDataAsync<GoogleDriveListResponse>(url, cancelToken);
                 foreach (var n in res.items)
                     yield return n;
 
@@ -463,10 +480,10 @@ namespace Duplicati.Library.Backend.GoogleDrive
 
         private GoogleDriveAboutResponse GetAboutInfo()
         {
-            return m_oauth.GetJSONData<GoogleDriveAboutResponse>(WebApi.GoogleDrive.AboutInfoUrl());
+            return m_oauth.GetJSONDataAsync<GoogleDriveAboutResponse>(WebApi.GoogleDrive.AboutInfoUrl(), CancellationToken.None).Result;
         }
 
-        private GoogleDriveFolderItem CreateFolder(string name, string parent)
+        private async Task<GoogleDriveFolderItem> CreateFolderAsync(string name, string parent, CancellationToken cancelToken)
         {
             var folder = new GoogleDriveFolderItem()
             {
@@ -477,19 +494,8 @@ namespace Duplicati.Library.Backend.GoogleDrive
                 parents = new GoogleDriveParentReference[] { new GoogleDriveParentReference { id = parent } }
             };
 
-            var data = System.Text.Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(folder));
-
-            return m_oauth.GetJSONData<GoogleDriveFolderItem>(WebApi.GoogleDrive.CreateFolderUrl(m_teamDriveID), x =>
-            {
-                x.Method = "POST";
-                x.ContentType = "application/json; charset=UTF-8";
-                x.ContentLength = data.Length;
-
-            }, req =>
-            {
-                using (var rs = req.GetRequestStream())
-                    rs.Write(data, 0, data.Length);
-            });
+            return await m_oauth.PostAndGetJSONDataAsync<GoogleDriveFolderItem>(
+                WebApi.GoogleDrive.CreateFolderUrl(m_teamDriveID), folder, "POST", cancelToken);
         }
     }
 }

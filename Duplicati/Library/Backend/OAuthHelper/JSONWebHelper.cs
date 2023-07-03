@@ -361,17 +361,6 @@ namespace Duplicati.Library
             m_client.Dispose();
         }
 
-        public class HttpRequestStatusException : HttpRequestException
-        {
-            public readonly HttpResponseMessage Response;
-
-            public HttpRequestStatusException(HttpResponseMessage resp)
-                : base(resp.ReasonPhrase)
-            {
-                Response = resp;
-            }
-        }
-
         /// <summary>
         /// A utility class that shadows the real stream but provides access
         /// to the first 2kb of the stream to use in error reporting

@@ -296,7 +296,8 @@ namespace Duplicati.Library.Backend.CloudFiles
 
             using (var resp = await m_client.SendAsync(req, cancelToken))
             using (var s = await resp.Content.ReadAsStreamAsync())
-            using (var mds = new Utility.MD5CalculatingStream(s))
+            using (var hasher = MD5.Create())
+            using (var mds = new Utility.HashCalculatingStream(s, hasher))
             {
                 string md5Hash = resp.Headers.GetValues("ETag").FirstOrDefault();
                 await Utility.Utility.CopyStreamAsync(mds, stream, true, cancelToken, m_copybuffer);
@@ -309,8 +310,9 @@ namespace Duplicati.Library.Backend.CloudFiles
         public async Task PutAsync(string remotename, System.IO.Stream stream, CancellationToken cancelToken)
         {
             var req = await CreateRequestAsync("/" + remotename, "", cancelToken);
-            req.Method = HttpMethod.Put;            
-            using (var mds = new Utility.MD5CalculatingStream(stream))
+            req.Method = HttpMethod.Put;
+            using (var hasher = MD5.Create())
+            using (var mds = new Utility.HashCalculatingStream(stream, hasher))
             using (var body = new StreamContent(mds))
             {
                 body.Headers.ContentType = MediaTypeHeaderValue.Parse("application/octet-stream");

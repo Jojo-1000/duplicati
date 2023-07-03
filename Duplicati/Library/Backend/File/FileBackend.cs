@@ -384,13 +384,16 @@ namespace Duplicati.Library.Backend.File
 
         public bool SupportsStreaming => !m_moveFile;
 
-        public void Rename(string oldname, string newname)
+        public async Task RenameAsync(string oldname, string newname, CancellationToken cancelToken)
         {
             var source = GetRemoteName(oldname);
             var target = GetRemoteName(newname);
-            if (systemIO.FileExists(target))
-                systemIO.FileDelete(target);
-            systemIO.FileMove(source, target);
+            await Task.Run(() =>
+            {
+                if (systemIO.FileExists(target))
+                    systemIO.FileDelete(target);
+                systemIO.FileMove(source, target);
+            }, cancelToken);
         }
 
         /// <summary>

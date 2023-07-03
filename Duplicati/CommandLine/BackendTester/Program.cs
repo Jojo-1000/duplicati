@@ -316,7 +316,7 @@ namespace Duplicati.CommandLine.BackendTester
 
                         Console.WriteLine("Renaming file {0} from {1} to {2}", renameIndex, originalRenamedFile.remotefilename, renamedFileNewName);
 
-                        renameEnabledBackend.Rename(originalRenamedFile.remotefilename, renamedFileNewName);
+                        renameEnabledBackend.RenameAsync(originalRenamedFile.remotefilename, renamedFileNewName, token).Wait();
                         files[renameIndex] = new TempFile(renamedFileNewName, originalRenamedFile.localfilename, originalRenamedFile.hash, originalRenamedFile.length);
                     }
 

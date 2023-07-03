@@ -30,6 +30,7 @@ using System.Threading.Tasks;
 
 namespace Duplicati.Library.Backend.Backblaze
 {
+    // TODO: Implement IBackendPagination
     public class B2 : IBackend
     {
         private const string B2_ID_OPTION = "b2-accountid";

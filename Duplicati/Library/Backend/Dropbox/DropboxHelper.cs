@@ -95,9 +95,6 @@ namespace Duplicati.Library.Backend.Dropbox
             if (cancelToken.CanBeCanceled)
                 cancelToken.Register(() => tcs.Cancel());
 
-            byte[] buffer = new byte[Utility.Utility.DEFAULT_BUFFER_SIZE];
-            int sizeToRead = Math.Min((int)Utility.Utility.DEFAULT_BUFFER_SIZE, chunksize);
-
             var ussr = await ReadJSONResponseAsync<UploadSessionStartResult>(req, tcs.Token); // pun intended
             globalBytesRead += chunksize;
 
@@ -128,22 +125,6 @@ namespace Duplicati.Library.Backend.Dropbox
                 if (cancelToken.CanBeCanceled)
                     cancelToken.Register(() => tcs.Cancel());
 
-                int bytesReadInRequest = 0;
-                sizeToRead = Math.Min(chunksize, (int)Utility.Utility.DEFAULT_BUFFER_SIZE);
-                using (var rs = req.GetRequestStream())
-                {
-                    int bytesRead = 0;
-                    do
-                    {
-                        bytesRead = await stream.ReadAsync(buffer, 0, sizeToRead, cancelToken).ConfigureAwait(false);
-                        bytesReadInRequest += bytesRead;
-                        globalBytesRead += (ulong)bytesRead;
-                        await rs.WriteAsync(buffer, 0, bytesRead, cancelToken).ConfigureAwait(false);
-
-                    }
-                    while (bytesRead > 0 && bytesReadInRequest < chunksize);
-                }
-
                 using (var response = await GetResponseAsync(req, null, tcs.Token))
                     await response.Content.ReadAsStringAsync().ConfigureAwait(false);
 
@@ -159,7 +140,7 @@ namespace Duplicati.Library.Backend.Dropbox
                 usfa.commit.path = path;
 
                 req = await CreateRequestAsync(WebApi.Dropbox.UploadSessionFinishUrl(), "POST", cancelToken);
-                req.Headers.Add(API_ARG_HEADER, JsonConvert.SerializeObject(usfa));                
+                req.Headers.Add(API_ARG_HEADER, JsonConvert.SerializeObject(usfa));
                 //req.ContentType = "application/octet-stream";
 
                 tcs = new CancellationTokenSource(200000);
@@ -266,63 +247,6 @@ namespace Duplicati.Library.Backend.Dropbox
         }
     }
 
-    public class PartialStream : Stream
-    {
-        private readonly Stream m_source;
-        private readonly long m_offset;
-        private readonly long m_length;
-        private long m_position;
-
-        public PartialStream(Stream source, long offset, long length)
-        {
-            m_source = source ?? throw new ArgumentNullException(nameof(source));
-            m_offset = offset;
-            m_length = length;
-        }
-
-        public override bool CanRead => true;
-        public override bool CanSeek => false;
-        public override bool CanWrite => false;
-        public override long Length => m_length;
-        public override long Position { get => m_position; set => throw new NotSupportedException(); }
-
-        public override void Flush()
-        {
-        }
-
-        public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
-        {
-            var c = (int)Math.Min(count, m_length - m_position);
-            var r = await m_source.ReadAsync(buffer, offset, c, cancellationToken);
-            m_position += r;
-            return r;
-        }
-
-        public override int Read(byte[] buffer, int offset, int count)
-        {
-            var c = (int)Math.Min(count, m_length - m_position);
-            var r = m_source.Read(buffer, offset, c);
-            m_position += r;
-            return r;
-        }
-
-
-        public override long Seek(long offset, SeekOrigin origin)
-        {
-            throw new NotSupportedException();
-        }
-
-        public override void SetLength(long value)
-        {
-            throw new NotSupportedException();
-        }
-
-        public override void Write(byte[] buffer, int offset, int count)
-        {
-            throw new NotSupportedException();
-        }
-    }
-
     public class DropboxException : Exception
     {
         public JObject errorJSON { get; set; }
@@ -335,7 +259,7 @@ namespace Duplicati.Library.Backend.Dropbox
 
     public class FolderMetadata : MetaData
     {
-        
+
     }
 
     public class UploadSessionStartArg

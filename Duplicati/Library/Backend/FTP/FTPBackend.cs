@@ -26,11 +26,11 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Duplicati.Library.Backend
+namespace Duplicati.Library.Backend.FTP
 {
     // ReSharper disable once UnusedMember.Global
     // This class is instantiated dynamically in the BackendLoader.
-    public class FTP : IBackend
+    public class FTP : IBackend, IBackendPagination
     {
         private System.Net.NetworkCredential m_userInfo;
         private readonly string m_url;
@@ -356,7 +356,7 @@ namespace Duplicati.Library.Backend
         public Task TestAsync(CancellationToken cancelToken)
             => this.TestListAsync(cancelToken);
 
-        public async Task CreateFolder()
+        public async Task CreateFolderAsync(CancellationToken cancelToken)
         {
             System.Net.FtpWebRequest req = CreateRequest("", true);
             req.Method = System.Net.WebRequestMethods.Ftp.MakeDirectory;
@@ -364,6 +364,9 @@ namespace Duplicati.Library.Backend
             using (await req.GetResponseAsync())
             { }
         }
+
+        public Task<IList<IFileEntry>> ListAsync(CancellationToken cancelToken)
+            => this.CondensePaginatedListAsync(cancelToken);
 
         #endregion
 
@@ -401,16 +404,6 @@ namespace Duplicati.Library.Backend
                 req.EnableSsl = m_useSSL;
 
             return req;
-        }
-
-        public Task<IList<IFileEntry>> ListAsync(CancellationToken cancelToken)
-        {
-            throw new NotImplementedException();
-        }
-
-        public Task CreateFolderAsync(CancellationToken cancelToken)
-        {
-            throw new NotImplementedException();
         }
 
         /// <summary>

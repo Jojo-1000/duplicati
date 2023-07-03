@@ -9,11 +9,11 @@
   </PropertyGroup>
     
   <ItemGroup>	
-	  <!--<ProjectReference Include="..\..\Library\Backend\AzureBlob\Duplicati.Library.Backend.AzureBlob.csproj">
+	  <ProjectReference Include="..\..\Library\Backend\AzureBlob\Duplicati.Library.Backend.AzureBlob.csproj">
     </ProjectReference>
     <ProjectReference Include="..\..\Library\Backend\Dropbox\Duplicati.Library.Backend.Dropbox.csproj">
     </ProjectReference>
-    <ProjectReference Include="..\..\Library\Backend\Idrivee2\Duplicati.Library.Backend.Idrivee2.csproj">
+    <!--<ProjectReference Include="..\..\Library\Backend\Idrivee2\Duplicati.Library.Backend.Idrivee2.csproj">
     </ProjectReference>
     <ProjectReference Include="..\..\Library\Backend\Jottacloud\Duplicati.Library.Backend.Jottacloud.csproj">
     </ProjectReference>
@@ -42,10 +42,10 @@
     <!--<ProjectReference Include="..\..\Library\Backend\OneDrive\Duplicati.Library.Backend.OneDrive.csproj">
     </ProjectReference>
     <ProjectReference Include="..\..\Library\Backend\TahoeLAFS\Duplicati.Library.Backend.TahoeLAFS.csproj">
-    </ProjectReference>
+    </ProjectReference>-->
     <ProjectReference Include="..\..\Library\Backend\GoogleServices\Duplicati.Library.Backend.GoogleServices.csproj">
     </ProjectReference>
-    <ProjectReference Include="..\..\Library\Backend\OpenStack\Duplicati.Library.Backend.OpenStack.csproj">
+    <!--<ProjectReference Include="..\..\Library\Backend\OpenStack\Duplicati.Library.Backend.OpenStack.csproj">
     </ProjectReference>
     <ProjectReference Include="..\..\Library\Backend\HubiC\Duplicati.Library.Backend.HubiC.csproj">
     </ProjectReference>
@@ -53,9 +53,9 @@
     </ProjectReference>-->
     <ProjectReference Include="..\..\Library\Backend\File\Duplicati.Library.Backend.File.csproj">
     </ProjectReference>
-    <!--<ProjectReference Include="..\..\Library\Backend\FTP\Duplicati.Library.Backend.FTP.csproj">
+    <ProjectReference Include="..\..\Library\Backend\FTP\Duplicati.Library.Backend.FTP.csproj">
     </ProjectReference>
-    <ProjectReference Include="..\..\Library\Backend\S3\Duplicati.Library.Backend.S3.csproj">
+    <!--<ProjectReference Include="..\..\Library\Backend\S3\Duplicati.Library.Backend.S3.csproj">
     </ProjectReference>
     <ProjectReference Include="..\..\Library\Backend\SSHv2\Duplicati.Library.Backend.SSHv2.csproj">
     </ProjectReference>
@@ -72,9 +72,9 @@
     <ProjectReference Include="..\..\Library\Backend\Backblaze\Duplicati.Library.Backend.Backblaze.csproj">
     </ProjectReference>
     <!--<ProjectReference Include="..\..\Library\Backend\Mega\Duplicati.Library.Backend.Mega.csproj">
-    </ProjectReference>
-    <ProjectReference Include="..\..\Library\Backend\Box\Duplicati.Library.Backend.Box.csproj">
     </ProjectReference>-->
+    <ProjectReference Include="..\..\Library\Backend\Box\Duplicati.Library.Backend.Box.csproj">
+    </ProjectReference>
     <ProjectReference Include="..\..\Library\Backend\AlternativeFTP\Duplicati.Library.Backend.AlternativeFTP.csproj">
     </ProjectReference>
     <ProjectReference Include="..\..\Library\Common\Duplicati.Library.Common.csproj">

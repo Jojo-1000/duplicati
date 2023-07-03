@@ -60,7 +60,7 @@ namespace Duplicati.Library.Backend.Box
                 Exception newex = null;
                 try
                 {
-                    if (ex is HttpRequestStatusException exception)
+                    if (ex is Utility.HttpRequestStatusException exception)
                     {
                         var rawdata = await exception.Response.Content.ReadAsStringAsync();
 

@@ -8,6 +8,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -208,7 +209,7 @@ namespace Duplicati.Library.Modules.Builtin
             if (ExportFormat == ResultExportFormat.Json)
             {
                 content = new StringContent(body, Encoding.UTF8);
-                content.Headers.ContentType.MediaType = "application/json";
+                content.Headers.ContentType = MediaTypeHeaderValue.Parse("application/json; charset=utf-8");
             }
             else
             {
@@ -218,7 +219,7 @@ namespace Duplicati.Library.Modules.Builtin
                     postData += $"&{System.Uri.EscapeUriString(m_extraParameters)}";
                 }
                 content = new StringContent(postData, Encoding.UTF8);
-                content.Headers.ContentType.MediaType = "application/x-www-form-urlencoded";
+                content.Headers.ContentType = MediaTypeHeaderValue.Parse("application/x-www-form-urlencoded; charset=utf-8");
             }
 
 

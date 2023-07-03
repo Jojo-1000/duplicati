@@ -18,10 +18,11 @@ using Duplicati.Library.Backend.GoogleServices;
 using Duplicati.Library.Common.IO;
 using Duplicati.Library.Interface;
 using Duplicati.Library.Utility;
-using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Net;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -30,7 +31,7 @@ namespace Duplicati.Library.Backend.GoogleCloudStorage
 {
     // ReSharper disable once UnusedMember.Global
     // This class is instantiated dynamically in the BackendLoader.
-    public class GoogleCloudStorage : IBackend, IStreamingBackend, IRenameEnabledBackend
+    public class GoogleCloudStorage : IBackend, IBackendPagination, IRenameEnabledBackend
     {
         private const string AUTHID_OPTION = "authid";
         private const string PROJECT_OPTION = "gcs-project";
@@ -95,11 +96,11 @@ namespace Duplicati.Library.Backend.GoogleCloudStorage
             public string storageClass { get; set; }
         }
 
-        private T HandleListExceptions<T>(Func<T> func)
+        private async Task<T> HandleListExceptions<T>(Func<Task<T>> func)
         {
             try
             {
-                return func();
+                return await func();
             }
             catch (WebException wex)
             {
@@ -111,12 +112,63 @@ namespace Duplicati.Library.Backend.GoogleCloudStorage
         }
 
         #region IBackend implementation
-        public IEnumerable<IFileEntry> List()
+        public Task<IList<IFileEntry>> ListAsync(CancellationToken cancelToken)
+            => this.CondensePaginatedListAsync(cancelToken);
+
+        public async Task GetAsync(string remotename, Stream destination, CancellationToken cancelToken)
+        {
+            var url = WebApi.GoogleCloudStorage.GetUrl(m_bucket, Library.Utility.Uri.UrlPathEncode(m_prefix + remotename));
+            var req = await m_oauth.CreateRequestAsync(url, "GET", cancelToken);
+
+            using (var resp = await m_oauth.GetResponseAsync(req, null, cancelToken))
+                if (resp.StatusCode == HttpStatusCode.NotFound)
+                {
+                    throw new FileMissingException();
+                }
+                else if (!resp.IsSuccessStatusCode)
+                {
+                    throw new HttpRequestStatusException(resp);
+                }
+                else
+                {
+                    using (var rs = await resp.Content.ReadAsStreamAsync())
+                        Library.Utility.Utility.CopyStream(rs, destination);
+                }
+        }
+
+        public async Task DeleteAsync(string remotename, CancellationToken cancelToken)
+        {
+            var req = await m_oauth.CreateRequestAsync(
+                WebApi.GoogleCloudStorage.DeleteUrl(m_bucket, Library.Utility.Uri.UrlPathEncode(m_prefix + remotename)),
+                "DELETE", cancelToken);
+
+            await m_oauth.ReadJSONResponseAsync<object>(req, cancelToken);
+        }
+
+        public Task TestAsync(CancellationToken cancelToken)
+            => this.TestListAsync(cancelToken);
+
+        public async Task CreateFolderAsync(CancellationToken cancelToken)
+        {
+            if (string.IsNullOrEmpty(m_project))
+                throw new UserInformationException(Strings.GoogleCloudStorage.ProjectIDMissingError(PROJECT_OPTION), "GoogleCloudStorageMissingProjectID");
+
+            var data = new CreateBucketRequest
+            {
+                name = m_bucket,
+                location = m_location,
+                storageClass = m_storage_class
+            };
+
+            await m_oauth.ReadJSONResponseAsync<BucketResourceItem>(WebApi.GoogleCloudStorage.CreateFolderUrl(m_project), data, "POST", cancelToken);
+        }
+
+        public async IAsyncEnumerable<IFileEntry> ListEnumerableAsync([EnumeratorCancellation] CancellationToken cancelToken)
         {
             var url = WebApi.GoogleCloudStorage.ListUrl(m_bucket, Utility.Uri.UrlEncode(m_prefix));
             while (true)
             {
-                var resp = HandleListExceptions(() => m_oauth.ReadJSONResponse<ListBucketResponse>(url));
+                var resp = await HandleListExceptions(async () => await m_oauth.ReadJSONResponseAsync<ListBucketResponse>(url, null, "GET", cancelToken));
 
                 if (resp.items != null)
                     foreach (var f in resp.items)
@@ -136,57 +188,19 @@ namespace Duplicati.Library.Backend.GoogleCloudStorage
                 if (string.IsNullOrWhiteSpace(token))
                     break;
                 url = WebApi.GoogleCloudStorage.ListUrl(m_bucket, Utility.Uri.UrlEncode(m_prefix), token);
+
             }
         }
 
-        public async Task PutAsync(string remotename, string filename, CancellationToken cancelToken)
+        public async Task PutAsync(string remotename, System.IO.Stream stream, CancellationToken cancelToken)
         {
-            using (System.IO.FileStream fs = System.IO.File.OpenRead(filename))
-                await PutAsync(remotename, fs, cancelToken);
-        }
+            var item = new BucketResourceItem { name = m_prefix + remotename };
 
-        public void Get(string remotename, string filename)
-        {
-            using (System.IO.FileStream fs = System.IO.File.Create(filename))
-                Get(remotename, fs);
-        }
-        public void Delete(string remotename)
-        {
+            var url = WebApi.GoogleCloudStorage.PutUrl(m_bucket);
+            var res = await GoogleCommon.ChunkedUploadWithResumeAsync<BucketResourceItem, BucketResourceItem>(m_oauth, item, url, stream, cancelToken);
 
-            var req = m_oauth.CreateRequest(WebApi.GoogleCloudStorage.DeleteUrl(m_bucket, Library.Utility.Uri.UrlPathEncode(m_prefix + remotename)));
-            req.Method = "DELETE";
-
-            m_oauth.ReadJSONResponse<object>(req);
-        }
-
-        public void Test()
-        {
-            this.TestList();
-        }
-
-        public void CreateFolder()
-        {
-            if (string.IsNullOrEmpty(m_project))
-                throw new UserInformationException(Strings.GoogleCloudStorage.ProjectIDMissingError(PROJECT_OPTION), "GoogleCloudStorageMissingProjectID");
-
-            var data = System.Text.Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new CreateBucketRequest
-            {
-                name = m_bucket,
-                location = m_location,
-                storageClass = m_storage_class
-            }));
-
-            var req = m_oauth.CreateRequest(WebApi.GoogleCloudStorage.CreateFolderUrl(m_project));
-            req.Method = "POST";
-            req.ContentLength = data.Length;
-            req.ContentType = "application/json; charset=UTF-8";
-
-            var areq = new AsyncHttpRequest(req);
-
-            using (var rs = areq.GetRequestStream())
-                rs.Write(data, 0, data.Length);
-
-            m_oauth.ReadJSONResponse<BucketResourceItem>(areq);
+            if (res == null)
+                throw new Exception("Upload succeeded, but no data was returned");
         }
 
         public string DisplayName
@@ -232,57 +246,19 @@ namespace Duplicati.Library.Backend.GoogleCloudStorage
             }
         }
 
+        public bool SupportsStreaming => true;
+
         #endregion
 
-        public async Task PutAsync(string remotename, System.IO.Stream stream, CancellationToken cancelToken)
+        public async Task RenameAsync(string oldname, string newname, CancellationToken cancelToken)
         {
-            var item = new BucketResourceItem { name = m_prefix + remotename };
-
-            var url = WebApi.GoogleCloudStorage.PutUrl(m_bucket);
-            var res = await GoogleCommon.ChunkedUploadWithResumeAsync<BucketResourceItem, BucketResourceItem>(m_oauth, item, url, stream, cancelToken);
-
-            if (res == null)
-                throw new Exception("Upload succeeded, but no data was returned");
-        }
-
-        public void Get(string remotename, System.IO.Stream stream)
-        {
-            try
-            {
-                var url = WebApi.GoogleCloudStorage.GetUrl(m_bucket, Library.Utility.Uri.UrlPathEncode(m_prefix + remotename)); 
-                var req = m_oauth.CreateRequest(url);
-                var areq = new AsyncHttpRequest(req);
-
-                using (var resp = areq.GetResponse())
-                using (var rs = areq.GetResponseStream())
-                    Library.Utility.Utility.CopyStream(rs, stream);
-            }
-            catch (WebException wex)
-            {
-                if (wex.Response is HttpWebResponse response && response.StatusCode == HttpStatusCode.NotFound)
-                    throw new FileMissingException();
-                else
-                    throw;
-            }
-        }
-
-        public void Rename(string oldname, string newname)
-        {
-            var data = System.Text.Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new BucketResourceItem
+            var data = new BucketResourceItem
             {
                 name = m_prefix + newname,
-            }));
+            };
 
-            var req = m_oauth.CreateRequest(WebApi.GoogleCloudStorage.RenameUrl(m_bucket, Utility.Uri.UrlPathEncode(m_prefix + oldname)));
-            req.Method = "PATCH";
-            req.ContentLength = data.Length;
-            req.ContentType = "application/json; charset=UTF-8";
-
-            var areq = new AsyncHttpRequest(req);
-            using (var rs = areq.GetRequestStream())
-                rs.Write(data, 0, data.Length);
-
-            m_oauth.ReadJSONResponse<BucketResourceItem>(req);
+            var url = WebApi.GoogleCloudStorage.RenameUrl(m_bucket, Utility.Uri.UrlPathEncode(m_prefix + oldname));
+            await m_oauth.ReadJSONResponseAsync<BucketResourceItem>(url, data, "PATCH", CancellationToken.None);
         }
 
         #region IDisposable implementation

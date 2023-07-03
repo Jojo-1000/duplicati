@@ -22,6 +22,7 @@ using System.Linq;
 using System.IO;
 using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
 
 namespace Duplicati.Library.UsageReporter
 {
@@ -73,8 +74,7 @@ namespace Duplicati.Library.UsageReporter
                                         if (fs.Length > 0)
                                         {
                                             var content = new StreamContent(fs);
-                                            content.Headers.ContentType.MediaType = "application/json";
-                                            content.Headers.ContentType.CharSet = "utf-8";
+                                            content.Headers.ContentType = MediaTypeHeaderValue.Parse("application/json; charset=utf-8");
                                             content.Headers.ContentLength = fs.Length;
 
                                             using (var resp = httpClient.PostAsync(UPLOAD_URL, content).Result)

@@ -49,14 +49,14 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!--<ProjectReference Include="..\..\Library\Backend\CloudFiles\Duplicati.Library.Backend.CloudFiles.csproj">
-    </ProjectReference>-->
+    <ProjectReference Include="..\..\Library\Backend\CloudFiles\Duplicati.Library.Backend.CloudFiles.csproj">
+    </ProjectReference>
     <ProjectReference Include="..\..\Library\Backend\AzureBlob\Duplicati.Library.Backend.AzureBlob.csproj">
     </ProjectReference>
     <ProjectReference Include="..\..\Library\Backend\File\Duplicati.Library.Backend.File.csproj">
     </ProjectReference>
-    <!--<ProjectReference Include="..\..\Library\Backend\FTP\Duplicati.Library.Backend.FTP.csproj">
-    </ProjectReference>-->
+    <ProjectReference Include="..\..\Library\Backend\FTP\Duplicati.Library.Backend.FTP.csproj">
+    </ProjectReference>
     <!--<ProjectReference Include="..\..\Library\Backend\Idrivee2\Duplicati.Library.Backend.Idrivee2.csproj">
     </ProjectReference>-->
     <!--<ProjectReference Include="..\..\Library\Backend\Jottacloud\Duplicati.Library.Backend.Jottacloud.csproj">
@@ -121,8 +121,8 @@
     </ProjectReference>
     <!--<ProjectReference Include="..\..\Library\Backend\OneDrive\Duplicati.Library.Backend.OneDrive.csproj">
     </ProjectReference>-->
-    <!--<ProjectReference Include="..\..\Library\Backend\GoogleServices\Duplicati.Library.Backend.GoogleServices.csproj">
-    </ProjectReference>-->
+    <ProjectReference Include="..\..\Library\Backend\GoogleServices\Duplicati.Library.Backend.GoogleServices.csproj">
+    </ProjectReference>
     <!--<ProjectReference Include="..\..\Library\Backend\OpenStack\Duplicati.Library.Backend.OpenStack.csproj">
     </ProjectReference>-->
     <!--<ProjectReference Include="..\..\Library\Backend\HubiC\Duplicati.Library.Backend.HubiC.csproj">
@@ -141,8 +141,8 @@
     </ProjectReference>
     <!--<ProjectReference Include="..\..\Library\Backend\Sia\Duplicati.Library.Backend.Sia.csproj">
     </ProjectReference>-->
-    <!--<ProjectReference Include="..\..\Library\Backend\Dropbox\Duplicati.Library.Backend.Dropbox.csproj">
-    </ProjectReference>-->
+    <ProjectReference Include="..\..\Library\Backend\Dropbox\Duplicati.Library.Backend.Dropbox.csproj">
+    </ProjectReference>
     <ProjectReference Include="..\..\Tools\Duplicati.Tools.csproj">
     </ProjectReference>
   </ItemGroup>
