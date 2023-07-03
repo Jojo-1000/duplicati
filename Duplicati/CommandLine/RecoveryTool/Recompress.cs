@@ -52,7 +52,7 @@ namespace Duplicati.CommandLine.RecoveryTool
 
                 Console.WriteLine("Listing files on backend: {0} ...", backend.ProtocolKey);
 
-                var rawlist = backend.ListAsync(cancelToken).Result.ToList();
+                var rawlist = backend.ListAsync(cancelToken).Await().ToList();
 
                 Console.WriteLine("Found {0} files at remote storage", rawlist.Count);
 

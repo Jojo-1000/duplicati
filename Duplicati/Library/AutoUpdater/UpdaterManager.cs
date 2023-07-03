@@ -345,8 +345,8 @@ namespace Duplicati.Library.AutoUpdater
                             string.Format("{0} v{1}{2}", APPNAME, SelfVersion.Version, string.IsNullOrWhiteSpace(InstallID) ? "" : " -" + InstallID));
                         httpClient.DefaultRequestHeaders.Add("X-Install-ID", InstallID);
 
-                        using (var resp = httpClient.GetAsync(url).Result.EnsureSuccessStatusCode())
-                        using (var cs = resp.Content.ReadAsStreamAsync().Result)
+                        using (var resp = httpClient.GetAsync(url).Await().EnsureSuccessStatusCode())
+                        using (var cs = resp.Content.ReadAsStreamAsync().Await())
                         using (var ss = new SignatureReadingStream(cs, SIGN_KEY))
                         using (var tr = new System.IO.StreamReader(ss))
                         using (var jr = new Newtonsoft.Json.JsonTextReader(tr))
@@ -465,8 +465,8 @@ namespace Duplicati.Library.AutoUpdater
                                 if (progress != null)
                                     cb = (s) => { progress(Math.Min(1.0, Math.Max(0.0, (double)s / version.CompressedSize))); };
 
-                                using (var resp = httpClient.GetAsync(url).Result)
-                                using (var rss = resp.Content.ReadAsStreamAsync().Result)
+                                using (var resp = httpClient.GetAsync(url).Await())
+                                using (var rss = resp.Content.ReadAsStreamAsync().Await())
                                 using (var pgs = new Duplicati.Library.Utility.ProgressReportingStream(rss, cb))
                                 {
                                     Duplicati.Library.Utility.Utility.CopyStream(pgs, tempfile);

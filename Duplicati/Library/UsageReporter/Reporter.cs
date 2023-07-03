@@ -17,6 +17,7 @@
 using System;
 using System.Threading.Tasks;
 using CoCoL;
+using Duplicati.Library.Utility;
 
 namespace Duplicati.Library.UsageReporter
 {
@@ -83,7 +84,7 @@ namespace Duplicati.Library.UsageReporter
         /// </summary>
         public static void Initialize()
         {
-            if (_eventChannel == null || _eventChannel.IsRetiredAsync.Result)
+            if (_eventChannel == null || _eventChannel.IsRetiredAsync.Await())
             {
                 if (IsDisabled)
                     return;
@@ -120,7 +121,7 @@ namespace Duplicati.Library.UsageReporter
         /// </summary>
         public static void ShutDown()
         {
-            if (_eventChannel != null && !_eventChannel.IsRetiredAsync.Result)
+            if (_eventChannel != null && !_eventChannel.IsRetiredAsync.Await())
                 _eventChannel.Retire();
 
             if (ShutdownTask != null)

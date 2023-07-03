@@ -20,6 +20,7 @@
 using Duplicati.Library.Common.IO;
 using Duplicati.Library.Interface;
 using Duplicati.Library.Localization.Short;
+using Duplicati.Library.Utility;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -369,7 +370,7 @@ namespace Duplicati.Library.Backend
 
         public string[] DNSName
         {
-            get { return new string[] { new Uri(JFS_ROOT).Host, new Uri(JFS_ROOT_UPLOAD).Host }; }
+            get { return new string[] { new System.Uri(JFS_ROOT).Host, new System.Uri(JFS_ROOT_UPLOAD).Host }; }
         }
 
         public async Task GetAsync(string remotename, Stream stream, CancellationToken cancelToken)
@@ -427,7 +428,7 @@ namespace Duplicati.Library.Backend
                         }
                     }));
                 }
-                var buffer = tasks.Dequeue().Result;
+                var buffer = tasks.Dequeue().Await();
                 stream.Write(buffer, 0, buffer.Length);
             }
         }

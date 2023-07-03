@@ -226,7 +226,7 @@ namespace Duplicati.Library.Modules.Builtin
             var request = new HttpRequestMessage(m_verb, m_url);
             request.Content = content;
 
-            using (var response = m_client.SendAsync(request).Result)
+            using (var response = m_client.SendAsync(request).Await())
             {
                 if (response.IsSuccessStatusCode)
                 {
@@ -235,7 +235,7 @@ namespace Duplicati.Library.Modules.Builtin
                                                      "HTTP Response: {0} - {1}: {2}",
                                                      ((int)response.StatusCode).ToString(),
                                                      response.ReasonPhrase,
-                                                     response.Content.ReadAsStringAsync().Result
+                                                     response.Content.ReadAsStringAsync().Await()
                                                     );
                 }
                 else
@@ -246,7 +246,7 @@ namespace Duplicati.Library.Modules.Builtin
                              "HTTP Response: {0} - {1}: {2}",
                              ((int)response.StatusCode).ToString(),
                              response.ReasonPhrase,
-                             response.Content.ReadAsStringAsync().Result
+                             response.Content.ReadAsStringAsync().Await()
                             );
                     // Throw exception
                     throw new HttpRequestStatusException(response); ;

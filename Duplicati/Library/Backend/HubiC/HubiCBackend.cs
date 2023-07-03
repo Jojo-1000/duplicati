@@ -16,6 +16,7 @@
 //  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 using Duplicati.Library.Backend.OpenStack;
 using Duplicati.Library.Interface;
+using Duplicati.Library.Utility;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -38,7 +39,7 @@ namespace Duplicati.Library.Backend.HubiC
         {
             public string token { get; set; }
             public string endpoint { get; set; }
-            public DateTime? expires { get; set;}
+            public DateTime? expires { get; set; }
         }
 
         private class OpenStackHelper : OpenStackStorage
@@ -70,7 +71,7 @@ namespace Duplicati.Library.Backend.HubiC
                         || (m_token.expires != null && (m_token.expires.Value - DateTime.UtcNow).TotalSeconds < 30))
                     {
                         m_token = m_helper.ReadJSONResponseAsync<HubiCAuthResponse>(
-                            HUBIC_API_CREDENTIAL_URL, null, "GET", CancellationToken.None).Result;
+                            HUBIC_API_CREDENTIAL_URL, null, "GET", CancellationToken.None).Await();
                     }
                     return m_token;
                 }
@@ -92,8 +93,8 @@ namespace Duplicati.Library.Backend.HubiC
                 {
                     if (m_token == null || string.IsNullOrWhiteSpace(m_token.endpoint))
                         return null;
-                    
-                    return new Uri(m_token.endpoint).Host;
+
+                    return new System.Uri(m_token.endpoint).Host;
                 }
             }
         }
@@ -171,7 +172,8 @@ namespace Duplicati.Library.Backend.HubiC
 
         public System.Collections.Generic.IList<ICommandLineArgument> SupportedCommands
         {
-            get {
+            get
+            {
                 return new List<ICommandLineArgument>(new ICommandLineArgument[] {
                     new CommandLineArgument(AUTHID_OPTION, CommandLineArgument.ArgumentType.Password, Strings.HubiC.AuthidShort, Strings.HubiC.AuthidLong(OAuthHelper.OAUTH_LOGIN_URL("hubic"))),
                 });
@@ -188,7 +190,7 @@ namespace Duplicati.Library.Backend.HubiC
 
         public string[] DNSName
         {
-            get { return new string[] { new Uri(HUBIC_API_URL).Host, m_openstack.EndPointDnsName }; }
+            get { return new string[] { new System.Uri(HUBIC_API_URL).Host, m_openstack.EndPointDnsName }; }
         }
 
         public bool SupportsStreaming => m_openstack.SupportsStreaming;

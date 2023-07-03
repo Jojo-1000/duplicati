@@ -15,6 +15,7 @@
 //  License along with this library; if not, write to the Free Software
 //  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 using Duplicati.Library.Interface;
+using Duplicati.Library.Utility;
 using Newtonsoft.Json;
 using System.Threading;
 
@@ -31,7 +32,7 @@ namespace Duplicati.Library.Backend
             base.AutoAuthHeader = true;
             base.AutoV2 = false; // Jottacloud is not v2 compatible because it generates a new refresh token with every access token refresh and invalidates the old.
 
-            var userinfo = GetJSONDataAsync<UserInfo>(USERINFO_URL, CancellationToken.None).Result;
+            var userinfo = GetJSONDataAsync<UserInfo>(USERINFO_URL, CancellationToken.None).Await();
             if (userinfo == null || string.IsNullOrEmpty(userinfo.Username))
                 throw new UserInformationException(Strings.Jottacloud.NoUsernameError, "JottaNoUsername");
             m_username = userinfo.Username;

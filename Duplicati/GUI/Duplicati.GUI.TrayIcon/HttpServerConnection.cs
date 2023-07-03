@@ -6,6 +6,7 @@ using System.Net.Http;
 using System.Text;
 using System.Threading;
 using Duplicati.Library.Common.IO;
+using Duplicati.Library.Utility;
 using Duplicati.Server.Serialization;
 using Duplicati.Server.Serialization.Interface;
 using Newtonsoft.Json;
@@ -79,7 +80,7 @@ namespace Duplicati.GUI.TrayIcon
             UseCookies = false
         });
 
-        public HttpServerConnection(Uri server, string password, bool saltedpassword, Program.PasswordSource passwordSource, bool disableTrayIconLogin, Dictionary<string, string> options)
+        public HttpServerConnection(System.Uri server, string password, bool saltedpassword, Program.PasswordSource passwordSource, bool disableTrayIconLogin, Dictionary<string, string> options)
         {
             m_baseUri = Util.AppendDirSeparator(server.ToString(), "/");
 
@@ -233,7 +234,7 @@ namespace Duplicati.GUI.TrayIcon
 
         private static string EncodeQueryString(Dictionary<string, string> dict)
         {
-            return string.Join("&", Array.ConvertAll(dict.Keys.ToArray(), key => string.Format("{0}={1}", Uri.EscapeUriString(key), Uri.EscapeUriString(dict[key]))));
+            return string.Join("&", Array.ConvertAll(dict.Keys.ToArray(), key => string.Format("{0}={1}", System.Uri.EscapeUriString(key), System.Uri.EscapeUriString(dict[key]))));
         }
 
         private class SaltAndNonce
@@ -258,8 +259,8 @@ namespace Duplicati.GUI.TrayIcon
                 HttpRequestMessage req = new HttpRequestMessage(HttpMethod.Post, m_baseUri + LOGIN_SCRIPT);
                 req.Content = new FormUrlEncodedContent(new[] { new KeyValuePair<string, string>("get-nonce", "1") });
 
-                using (var resp = m_client.SendAsync(req).Result)
-                using (var sr = new System.IO.StreamReader(resp.Content.ReadAsStreamAsync().Result, ENCODING, true))
+                using (var resp = m_client.SendAsync(req).Await())
+                using (var sr = new System.IO.StreamReader(resp.Content.ReadAsStreamAsync().Await(), ENCODING, true))
                 {
                     return Serializer.Deserialize<SaltAndNonce>(sr);
                 }
@@ -283,7 +284,7 @@ namespace Duplicati.GUI.TrayIcon
                     new Cookie("session-nonce", nonce, "/", req.RequestUri.Host)
                 });
 
-                using (var resp = m_client.SendAsync(req).Result)
+                using (var resp = m_client.SendAsync(req).Await())
                     if (resp.StatusCode == System.Net.HttpStatusCode.OK)
                     {
                         CookieCollection responseCookies = Library.Utility.RequestUtility.ParseCookies(resp);
@@ -331,7 +332,7 @@ namespace Duplicati.GUI.TrayIcon
             using (httpOptions)
             {
                 //Wrap it all in async stuff
-                using (var resp = m_client.GetAsync(m_baseUri + STATUS_WINDOW).Result)
+                using (var resp = m_client.GetAsync(m_baseUri + STATUS_WINDOW).Await())
                     if (resp.StatusCode == System.Net.HttpStatusCode.OK)
                     {
                         CookieCollection cookies = Library.Utility.RequestUtility.ParseCookies(resp);
@@ -412,7 +413,7 @@ namespace Duplicati.GUI.TrayIcon
             {
                 httpOptions.Configure(m_options);
 
-                var req = new HttpRequestMessage(new HttpMethod(method), new Uri(m_apiUri + endpoint + '?' + query));
+                var req = new HttpRequestMessage(new HttpMethod(method), new System.Uri(m_apiUri + endpoint + '?' + query));
 
                 req.Headers.Add("Accept-Charset", ENCODING.BodyName);
                 if (m_xsrftoken != null)
@@ -440,11 +441,11 @@ namespace Duplicati.GUI.TrayIcon
                     // Use cancellation token to enforce timout (Timeout property on client cannot be changed after it has been used)
                     using (var tokenSource = timeout > TimeSpan.Zero ? new CancellationTokenSource(timeout) : null)
                         resp = m_client.SendAsync(req, 
-                            tokenSource != null ? tokenSource.Token : CancellationToken.None).Result;
+                            tokenSource != null ? tokenSource.Token : CancellationToken.None).Await();
 
                     if (resp.IsSuccessStatusCode)
                     {
-                        using (var s = resp.Content.ReadAsStreamAsync().Result)
+                        using (var s = resp.Content.ReadAsStreamAsync().Await())
                             if (typeof(T) == typeof(string))
                             {
                                 using (System.IO.MemoryStream ms = new System.IO.MemoryStream())

@@ -128,7 +128,7 @@ namespace Duplicati.Library
         {
             var r = await base.CreateRequestAsync(url, method, cancelToken);
             if (!noAuthorization && AutoAuthHeader && !string.Equals(OAuthContextSettings.ServerURL, url))
-                r.Headers.Add("Authorization", string.Format("Bearer {0}", GetAccessTokenAsync(new CancellationTokenSource(TimeSpan.FromSeconds(25)).Token).Result));
+                r.Headers.Add("Authorization", string.Format("Bearer {0}", GetAccessTokenAsync(new CancellationTokenSource(TimeSpan.FromSeconds(25)).Token).Await()));
             return r;
         } 
 

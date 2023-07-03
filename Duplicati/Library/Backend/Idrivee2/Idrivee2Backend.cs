@@ -19,6 +19,7 @@
 #endregion
 using Duplicati.Library.Common.IO;
 using Duplicati.Library.Interface;
+using Duplicati.Library.Utility;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -87,12 +88,12 @@ namespace Duplicati.Library.Backend
             {
                 // TODO: Reuse some existing HttpClient instead of creating new one
                 using (var client = new HttpClient())
-                using (HttpResponseMessage resp = client.GetAsync(url).Result)
+                using (HttpResponseMessage resp = client.GetAsync(url).Await())
                 {
                     if (!resp.IsSuccessStatusCode)
                         throw new Exception("Failed to fetch region endpoint");
 
-                    return resp.Content.ReadAsStringAsync().Result;
+                    return resp.Content.ReadAsStringAsync().Await();
                 }
             }
             catch (HttpRequestException)

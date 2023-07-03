@@ -25,6 +25,7 @@ using System.Linq;
 using System.Globalization;
 using System.Threading;
 using Duplicati.Library.Common.IO;
+using Duplicati.Library.Utility;
 
 namespace Duplicati.CommandLine.BackendTester
 {
@@ -180,7 +181,7 @@ namespace Duplicati.CommandLine.BackendTester
                 try
                 {
                     backend.TestAsync(token).Wait();
-                    curlist = backend.ListAsync(token).Result;
+                    curlist = backend.ListAsync(token).Await();
                 }
                 catch (FolderMissingException)
                 {
@@ -416,7 +417,7 @@ namespace Duplicati.CommandLine.BackendTester
                             Console.WriteLine("*** Failed to delete file {0}, message: {1}", tx.remotefilename, ex);
                         }
 
-                    curlist = backend.ListAsync(token).Result;
+                    curlist = backend.ListAsync(token).Await();
                     foreach (Library.Interface.IFileEntry fe in curlist)
                         if (!fe.IsFolder)
                         {

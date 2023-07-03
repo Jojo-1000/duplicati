@@ -111,7 +111,7 @@ namespace Duplicati.Library.Backend.GoogleDrive
             get
             {
                 if (string.IsNullOrEmpty(m_currentFolderId))
-                    m_currentFolderId = GetFolderIdAsync(m_path, CancellationToken.None).Result;
+                    m_currentFolderId = GetFolderIdAsync(m_path, CancellationToken.None).Await();
 
                 return m_currentFolderId;
             }
@@ -480,7 +480,7 @@ namespace Duplicati.Library.Backend.GoogleDrive
 
         private GoogleDriveAboutResponse GetAboutInfo()
         {
-            return m_oauth.GetJSONDataAsync<GoogleDriveAboutResponse>(WebApi.GoogleDrive.AboutInfoUrl(), CancellationToken.None).Result;
+            return m_oauth.GetJSONDataAsync<GoogleDriveAboutResponse>(WebApi.GoogleDrive.AboutInfoUrl(), CancellationToken.None).Await();
         }
 
         private async Task<GoogleDriveFolderItem> CreateFolderAsync(string name, string parent, CancellationToken cancelToken)
