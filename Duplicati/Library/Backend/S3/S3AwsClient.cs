@@ -81,7 +81,7 @@ namespace Duplicati.Library.Backend
             m_dnsHost = string.IsNullOrWhiteSpace(cfg.ServiceURL) ? null : new Uri(cfg.ServiceURL).Host;
         }
 
-        public void AddBucket(string bucketName)
+        public async Task AddBucketAsync(string bucketName, CancellationToken cancelToken)
         {
             var request = new PutBucketRequest
             {
@@ -91,14 +91,14 @@ namespace Duplicati.Library.Backend
             if (!string.IsNullOrEmpty(m_locationConstraint))
                 request.BucketRegionName = m_locationConstraint;
 
-            m_client.PutBucketAsync(request).GetAwaiter().GetResult();
+            await m_client.PutBucketAsync(request, cancelToken);
         }
 
         internal static AmazonS3Config GetDefaultAmazonS3Config()
         {
             return new AmazonS3Config()
             {
-                BufferSize = (int) Utility.Utility.DEFAULT_BUFFER_SIZE,
+                BufferSize = (int)Utility.Utility.DEFAULT_BUFFER_SIZE,
 
                 // If this is not set, accessing the property will trigger an expensive operation (~30 seconds)
                 // to get the region endpoint.  The use of ARNs (Amazon Resource Names) doesn't appear to be
@@ -108,7 +108,7 @@ namespace Duplicati.Library.Backend
             };
         }
 
-        public virtual void GetFileStream(string bucketName, string keyName, System.IO.Stream target)
+        public virtual async Task GetFileStreamAsync(string bucketName, string keyName, System.IO.Stream target, CancellationToken cancelToken)
         {
             var objectGetRequest = new GetObjectRequest
             {
@@ -116,13 +116,13 @@ namespace Duplicati.Library.Backend
                 Key = keyName
             };
 
-            using (GetObjectResponse objectGetResponse = m_client.GetObjectAsync(objectGetRequest).GetAwaiter().GetResult())
-            using(System.IO.Stream s = objectGetResponse.ResponseStream)
+            using (GetObjectResponse objectGetResponse = await m_client.GetObjectAsync(objectGetRequest, cancelToken))
+            using (System.IO.Stream s = objectGetResponse.ResponseStream)
             {
                 try { s.ReadTimeout = (int)TimeSpan.FromMinutes(1).TotalMilliseconds; }
                 catch { }
 
-                Utility.Utility.CopyStream(s, target);
+                await Utility.Utility.CopyStreamAsync(s, target, cancelToken);
             }
         }
 
@@ -158,7 +158,7 @@ namespace Duplicati.Library.Backend
             }
         }
 
-        public void DeleteObject(string bucketName, string keyName)
+        public async Task DeleteObjectAsync(string bucketName, string keyName, CancellationToken cancelToken)
         {
             var objectDeleteRequest = new DeleteObjectRequest
             {
@@ -166,10 +166,10 @@ namespace Duplicati.Library.Backend
                 Key = keyName
             };
 
-            m_client.DeleteObjectAsync(objectDeleteRequest).GetAwaiter().GetResult();
+            await m_client.DeleteObjectAsync(objectDeleteRequest, cancelToken);
         }
 
-        public virtual IEnumerable<IFileEntry> ListBucket(string bucketName, string prefix)
+        public virtual async IAsyncEnumerable<IFileEntry> ListBucketAsync(string bucketName, string prefix, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancelToken)
         {
             bool isTruncated = true;
             string filename = null;
@@ -182,7 +182,7 @@ namespace Duplicati.Library.Backend
             //We truncate after ITEM_LIST_LIMIT elements, and then repeat
             while (isTruncated)
             {
-                var listRequest = new ListObjectsRequest {BucketName = bucketName};
+                var listRequest = new ListObjectsRequest { BucketName = bucketName };
 
                 if (!string.IsNullOrEmpty(filename))
                     listRequest.Marker = filename;
@@ -194,7 +194,7 @@ namespace Duplicati.Library.Backend
                 ListObjectsResponse listResponse;
                 try
                 {
-                    listResponse = m_client.ListObjectsAsync(listRequest).GetAwaiter().GetResult();
+                    listResponse = await m_client.ListObjectsAsync(listRequest, cancelToken);
                 }
                 catch (AmazonS3Exception e)
                 {
@@ -222,7 +222,7 @@ namespace Duplicati.Library.Backend
             }
         }
 
-        public void RenameFile(string bucketName, string source, string target)
+        public async Task RenameFileAsync(string bucketName, string source, string target, CancellationToken cancelToken)
         {
             var copyObjectRequest = new CopyObjectRequest
             {
@@ -232,9 +232,9 @@ namespace Duplicati.Library.Backend
                 DestinationKey = target
             };
 
-            m_client.CopyObjectAsync(copyObjectRequest).GetAwaiter().GetResult();
+            await m_client.CopyObjectAsync(copyObjectRequest, cancelToken);
 
-            DeleteObject(bucketName, source);
+            await DeleteObjectAsync(bucketName, source, cancelToken);
         }
 
         #region IDisposable Members

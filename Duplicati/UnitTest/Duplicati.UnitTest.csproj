@@ -33,14 +33,14 @@
     <ProjectReference Include="..\Library\Backend\OAuthHelper\Duplicati.Library.OAuthHelper.csproj">
     </ProjectReference>
     <!--<ProjectReference Include="..\Library\Backend\Rclone\Duplicati.Library.Backend.Rclone.csproj">
-	  </ProjectReference>
+	  </ProjectReference>-->
     <ProjectReference Include="..\Library\Backend\Idrivee2\Duplicati.Library.Backend.Idrivee2.csproj">
     </ProjectReference>
-    <ProjectReference Include="..\Library\Backend\OneDrive\Duplicati.Library.Backend.OneDrive.csproj">
-    </ProjectReference>
+    <!--<ProjectReference Include="..\Library\Backend\OneDrive\Duplicati.Library.Backend.OneDrive.csproj">
+    </ProjectReference>-->
     <ProjectReference Include="..\Library\Backend\S3\Duplicati.Library.Backend.S3.csproj">
     </ProjectReference>
-    <ProjectReference Include="..\Library\Backend\SharePoint\Duplicati.Library.Backend.SharePoint.csproj">
+    <!--<ProjectReference Include="..\Library\Backend\SharePoint\Duplicati.Library.Backend.SharePoint.csproj">
     </ProjectReference>
     <ProjectReference Include="..\Library\Backend\Sia\Duplicati.Library.Backend.Sia.csproj">
     </ProjectReference>

@@ -45,9 +45,9 @@
     </ProjectReference>
     <ProjectReference Include="..\..\Library\Backend\CloudFiles\Duplicati.Library.Backend.CloudFiles.csproj">
     </ProjectReference>
-    <!--<ProjectReference Include="..\..\Library\Backend\S3\Duplicati.Library.Backend.S3.csproj">
+    <ProjectReference Include="..\..\Library\Backend\S3\Duplicati.Library.Backend.S3.csproj">
     </ProjectReference>
-    <ProjectReference Include="..\..\Library\Backend\SSHv2\Duplicati.Library.Backend.SSHv2.csproj">
+    <!--<ProjectReference Include="..\..\Library\Backend\SSHv2\Duplicati.Library.Backend.SSHv2.csproj">
     </ProjectReference>
     <ProjectReference Include="..\..\Library\Backend\TahoeLAFS\Duplicati.Library.Backend.TahoeLAFS.csproj">
     </ProjectReference>

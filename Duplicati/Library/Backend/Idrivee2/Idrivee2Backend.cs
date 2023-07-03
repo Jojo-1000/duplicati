@@ -23,18 +23,19 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace Duplicati.Library.Backend
 {
-    public class Idrivee2Backend : IBackend, IStreamingBackend
+    public class Idrivee2Backend : IBackend, IBackendPagination, IRenameEnabledBackend
     {
         private static readonly string LOGTAG = Logging.Log.LogTagFromType<Idrivee2Backend>();
 
         static Idrivee2Backend()
         {
-            
+
         }
 
         private readonly string m_prefix;
@@ -73,7 +74,7 @@ namespace Duplicati.Library.Backend
                 throw new UserInformationException(Strings.Idrivee2Backend.NoKeyIdError, "Idrivee2NoKeyId");
             if (string.IsNullOrEmpty(accessKeySecret))
                 throw new UserInformationException(Strings.Idrivee2Backend.NoKeySecretError, "Idrivee2NoKeySecret");
-            string host= GetRegionEndpoint("https://api.idrivee2.com/api/service/get_region_end_point/" + accessKeyId);
+            string host = GetRegionEndpoint("https://api.idrivee2.com/api/service/get_region_end_point/" + accessKeyId);
 
 
             m_s3Client = new S3AwsClient(accessKeyId, accessKeySecret, null, host, null, true, options);
@@ -84,27 +85,17 @@ namespace Duplicati.Library.Backend
         {
             try
             {
-                System.Net.HttpWebRequest req = (System.Net.HttpWebRequest)System.Net.WebRequest.Create(url);
-                req.Method = System.Net.WebRequestMethods.Http.Get;
-                
-                Utility.AsyncHttpRequest areq = new Utility.AsyncHttpRequest(req);
-               
-                using (System.Net.HttpWebResponse resp = (System.Net.HttpWebResponse)areq.GetResponse())
+                // TODO: Reuse some existing HttpClient instead of creating new one
+                using (var client = new HttpClient())
+                using (HttpResponseMessage resp = client.GetAsync(url).Result)
                 {
-                    int code = (int)resp.StatusCode;
-                    if (code < 200 || code >= 300) //For some reason Mono does not throw this automatically
+                    if (!resp.IsSuccessStatusCode)
                         throw new Exception("Failed to fetch region endpoint");
-                    using (var s = areq.GetResponseStream())
-                    {
-                        using (var reader = new StreamReader(s))
-                        {
-                            string endpoint = reader.ReadToEnd();
-                            return endpoint;
-                        }
-                    }
+
+                    return resp.Content.ReadAsStringAsync().Result;
                 }
             }
-            catch (System.Net.WebException wex)
+            catch (HttpRequestException)
             {
                 //Convert to better exception
                 throw new Exception("Failed to fetch region endpoint");
@@ -123,50 +114,40 @@ namespace Duplicati.Library.Backend
         public bool SupportsStreaming => true;
 
 
-        public IEnumerable<IFileEntry> List()
-        {
-            foreach (IFileEntry file in Connection.ListBucket(m_bucket, m_prefix))
-            {
-                ((FileEntry)file).Name = file.Name.Substring(m_prefix.Length);
-                if (file.Name.StartsWith("/", StringComparison.Ordinal) && !m_prefix.StartsWith("/", StringComparison.Ordinal))
-                    ((FileEntry)file).Name = file.Name.Substring(1);
-
-                yield return file;
-            }
-        }
-
-        public async Task PutAsync(string remotename, string localname, CancellationToken cancelToken)
-        {
-            using (FileStream fs = File.Open(localname, FileMode.Open, FileAccess.Read, FileShare.Read))
-                await PutAsync(remotename, fs, cancelToken);
-        }
+        public Task<IList<IFileEntry>> ListAsync(CancellationToken cancelToken)
+            => this.CondensePaginatedListAsync(cancelToken);
 
         public async Task PutAsync(string remotename, Stream input, CancellationToken cancelToken)
         {
             await Connection.AddFileStreamAsync(m_bucket, GetFullKey(remotename), input, cancelToken);
         }
 
-        public void Get(string remotename, string localname)
+        public async Task GetAsync(string remotename, Stream destination, CancellationToken cancelToken)
         {
-            using (var fs = File.Open(localname, FileMode.Create, FileAccess.Write, FileShare.None))
-                Get(remotename, fs);
+            await Connection.GetFileStreamAsync(m_bucket, GetFullKey(remotename), destination, cancelToken);
         }
 
-        public void Get(string remotename, Stream output)
+        public async Task DeleteAsync(string remotename, CancellationToken cancelToken)
         {
-            Connection.GetFileStream(m_bucket, GetFullKey(remotename), output);
+            await Connection.DeleteObjectAsync(m_bucket, GetFullKey(remotename), cancelToken);
         }
 
-        public void Delete(string remotename)
+        public async Task TestAsync(CancellationToken cancelToken)
         {
-            Connection.DeleteObject(m_bucket, GetFullKey(remotename));
+            await this.TestListAsync(cancelToken);
+        }
+
+        public async Task CreateFolderAsync(CancellationToken cancelToken)
+        {
+            //S3 does not complain if the bucket already exists
+            await Connection.AddBucketAsync(m_bucket, cancelToken);
         }
 
         public IList<ICommandLineArgument> SupportedCommands
         {
             get
             {
-                
+
                 var defaults = new Amazon.S3.AmazonS3Config();
 
                 var exts =
@@ -182,10 +163,10 @@ namespace Duplicati.Library.Backend
 
 
                 var normal = new ICommandLineArgument[] {
-                  
+
                     new CommandLineArgument("access_key_secret", CommandLineArgument.ArgumentType.Password, Strings.Idrivee2Backend.KeySecretDescriptionShort, Strings.Idrivee2Backend.KeySecretDescriptionLong, null, new[]{"auth-password"}, null),
                     new CommandLineArgument("access_key_id", CommandLineArgument.ArgumentType.String, Strings.Idrivee2Backend.KeyIDDescriptionShort, Strings.Idrivee2Backend.KeyIDDescriptionLong,null, new[]{"auth-username"}, null)
-                 
+
                 };
 
                 return normal.Union(exts).ToList();
@@ -201,24 +182,26 @@ namespace Duplicati.Library.Backend
             }
         }
 
-        public void Test()
-        {
-            this.TestList();
-        }
-
-        public void CreateFolder()
-        {
-            //S3 does not complain if the bucket already exists
-            Connection.AddBucket(m_bucket);
-        }
-
         #endregion
+
+        public async IAsyncEnumerable<IFileEntry> ListEnumerableAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancelToken)
+        {
+            await foreach (IFileEntry file in Connection.ListBucketAsync(m_bucket, m_prefix, cancelToken))
+            {
+                ((FileEntry)file).Name = file.Name.Substring(m_prefix.Length);
+                if (file.Name.StartsWith("/", StringComparison.Ordinal) && !m_prefix.StartsWith("/", StringComparison.Ordinal))
+                    ((FileEntry)file).Name = file.Name.Substring(1);
+
+                yield return file;
+            }
+        }
+
 
         #region IRenameEnabledBackend Members
 
-        public void Rename(string source, string target)
+        public async Task RenameAsync(string source, string target, CancellationToken cancelToken)
         {
-            Connection.RenameFile(m_bucket, GetFullKey(source), GetFullKey(target));
+            await Connection.RenameFileAsync(m_bucket, GetFullKey(source), GetFullKey(target), cancelToken);
         }
 
         #endregion

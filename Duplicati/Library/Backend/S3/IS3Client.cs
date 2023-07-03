@@ -8,15 +8,15 @@ namespace Duplicati.Library.Backend
 {
     public interface IS3Client : IDisposable
     {
-        IEnumerable<IFileEntry> ListBucket(string bucketName, string prefix);
+        IAsyncEnumerable<IFileEntry> ListBucketAsync(string bucketName, string prefix, CancellationToken cancelToken);
 
-        void AddBucket(string bucketName);
+        Task AddBucketAsync(string bucketName, CancellationToken cancelToken);
 
-        void DeleteObject(string bucketName, string keyName);
+        Task DeleteObjectAsync(string bucketName, string keyName, CancellationToken cancelToken);
 
-        void RenameFile(string bucketName, string source, string target);
+        Task RenameFileAsync(string bucketName, string source, string target, CancellationToken cancelToken);
 
-        void GetFileStream(string bucketName, string keyName, System.IO.Stream target);
+        Task GetFileStreamAsync(string bucketName, string keyName, System.IO.Stream target, CancellationToken cancelToken);
 
         string GetDnsHost();
 

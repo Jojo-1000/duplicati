@@ -30,7 +30,7 @@ using System.Threading.Tasks;
 
 namespace Duplicati.Library.Backend
 {
-    public class S3 : IBackend, IStreamingBackend, IRenameEnabledBackend
+    public class S3 : IBackend, IBackendPagination, IRenameEnabledBackend
     {
         private static readonly string LOGTAG = Logging.Log.LogTagFromType<S3>();
 
@@ -336,45 +336,34 @@ namespace Duplicati.Library.Backend
         }
 
 
-        public IEnumerable<IFileEntry> List()
-        {
-            foreach (IFileEntry file in Connection.ListBucket(m_bucket, m_prefix))
-            {
-                ((FileEntry)file).Name = file.Name.Substring(m_prefix.Length);
 
-                //Fix for a bug in Duplicati 1.0 beta 3 and earlier, where filenames are incorrectly prefixed with a slash
-                if (file.Name.StartsWith("/", StringComparison.Ordinal) && !m_prefix.StartsWith("/", StringComparison.Ordinal))
-                    ((FileEntry)file).Name = file.Name.Substring(1);
-
-                yield return file;
-            }
-        }
-
-        public async Task PutAsync(string remotename, string localname, CancellationToken cancelToken)
-        {
-            using (FileStream fs = File.Open(localname, FileMode.Open, FileAccess.Read, FileShare.Read))
-                await PutAsync(remotename, fs, cancelToken);
-        }
+        public Task<IList<IFileEntry>> ListAsync(CancellationToken cancelToken)
+            => this.CondensePaginatedListAsync(cancelToken);
 
         public async Task PutAsync(string remotename, Stream input, CancellationToken cancelToken)
         {
             await Connection.AddFileStreamAsync(m_bucket, GetFullKey(remotename), input, cancelToken);
         }
 
-        public void Get(string remotename, string localname)
+        public async Task GetAsync(string remotename, Stream destination, CancellationToken cancelToken)
         {
-            using (var fs = System.IO.File.Open(localname, System.IO.FileMode.Create, System.IO.FileAccess.Write, System.IO.FileShare.None))
-                Get(remotename, fs);
+            await Connection.GetFileStreamAsync(m_bucket, GetFullKey(remotename), destination, cancelToken);
         }
 
-        public void Get(string remotename, System.IO.Stream output)
+        public async Task DeleteAsync(string remotename, CancellationToken cancelToken)
         {
-            Connection.GetFileStream(m_bucket, GetFullKey(remotename), output);
+            await Connection.DeleteObjectAsync(m_bucket, GetFullKey(remotename), cancelToken);
         }
 
-        public void Delete(string remotename)
+        public async Task TestAsync(CancellationToken cancelToken)
         {
-            Connection.DeleteObject(m_bucket, GetFullKey(remotename));
+            await this.TestListAsync(cancelToken);
+        }
+
+        public async Task CreateFolderAsync(CancellationToken cancelToken)
+        {
+            //S3 does not complain if the bucket already exists
+            await Connection.AddBucketAsync(m_bucket, cancelToken);
         }
 
         public IList<ICommandLineArgument> SupportedCommands
@@ -432,24 +421,27 @@ namespace Duplicati.Library.Backend
             }
         }
 
-        public void Test()
-        {
-            this.TestList();
-        }
-
-        public void CreateFolder()
-        {
-            //S3 does not complain if the bucket already exists
-            Connection.AddBucket(m_bucket);
-        }
-
         #endregion
+
+        public async IAsyncEnumerable<IFileEntry> ListEnumerableAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancelToken)
+        {
+            await foreach (IFileEntry file in Connection.ListBucketAsync(m_bucket, m_prefix, cancelToken))
+            {
+                ((FileEntry)file).Name = file.Name.Substring(m_prefix.Length);
+
+                //Fix for a bug in Duplicati 1.0 beta 3 and earlier, where filenames are incorrectly prefixed with a slash
+                if (file.Name.StartsWith("/", StringComparison.Ordinal) && !m_prefix.StartsWith("/", StringComparison.Ordinal))
+                    ((FileEntry)file).Name = file.Name.Substring(1);
+
+                yield return file;
+            }
+        }
 
         #region IRenameEnabledBackend Members
 
-        public void Rename(string source, string target)
+        public async Task RenameAsync(string source, string target, CancellationToken cancelToken)
         {
-            Connection.RenameFile(m_bucket, GetFullKey(source), GetFullKey(target));
+            await Connection.RenameFileAsync(m_bucket, GetFullKey(source), GetFullKey(target), cancelToken);
         }
 
         #endregion
