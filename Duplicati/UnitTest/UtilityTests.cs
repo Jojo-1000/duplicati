@@ -70,7 +70,7 @@ namespace Duplicati.UnitTest
             System.Globalization.CultureInfo originalCulture = System.Globalization.CultureInfo.CurrentCulture;
             try
             {
-                System.Threading.Thread.CurrentThread.CurrentCulture = new System.Globalization.CultureInfo(cultureName, false);
+                CultureInfo.CurrentCulture = new System.Globalization.CultureInfo(cultureName, false);
 
                 // These are equivalent with respect to hu-HU, but different with respect to en-US.
                 string ddzs = "ddzs";
@@ -92,7 +92,7 @@ namespace Duplicati.UnitTest
             }
             finally
             {
-                System.Threading.Thread.CurrentThread.CurrentCulture = originalCulture;
+                CultureInfo.CurrentCulture = originalCulture;
             }
         }
 

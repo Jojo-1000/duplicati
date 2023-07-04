@@ -46,7 +46,7 @@ namespace Duplicati.UnitTest
                 string auth_password = Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), "unittest_authpassword.txt");
                 if (System.IO.File.Exists(auth_password))
                     opts["auth-password"] = File.ReadAllText(auth_password).Trim();
-                
+
                 return opts;
             }
         }
@@ -84,7 +84,7 @@ namespace Duplicati.UnitTest
             else if (other != null)
                 return other;
             else
-                using(var tf = new Library.Utility.TempFolder())
+                using (var tf = new Library.Utility.TempFolder())
                 {
                     tf.Protected = true;
                     return "file://" + tf;
@@ -113,41 +113,41 @@ namespace Duplicati.UnitTest
 
                 if (!Directory.Exists(t))
                     Directory.CreateDirectory(t);
-                
+
                 try { Directory.SetCreationTimeUtc(t, Directory.GetCreationTimeUtc(c)); }
-                catch(Exception ex) 
-                { 
+                catch (Exception ex)
+                {
                     if (timestampfailures++ < 20)
-                        Console.WriteLine("Failed to set creation time on dir {0}: {1}", t, ex.Message); 
+                        Console.WriteLine("Failed to set creation time on dir {0}: {1}", t, ex.Message);
                 }
 
                 try { Directory.SetLastWriteTimeUtc(t, Directory.GetLastWriteTimeUtc(c)); }
-                catch(Exception ex) 
-                { 
+                catch (Exception ex)
+                {
                     if (timestampfailures++ < 20)
-                        Console.WriteLine("Failed to set write time on dir {0}: {1}", t, ex.Message); 
+                        Console.WriteLine("Failed to set write time on dir {0}: {1}", t, ex.Message);
                 }
 
-                
-                foreach(var n in Directory.EnumerateFiles(c))
+
+                foreach (var n in Directory.EnumerateFiles(c))
                 {
                     var tf = Path.Combine(t, Path.GetFileName(n));
                     File.Copy(n, tf, true);
                     try { File.SetCreationTimeUtc(tf, System.IO.File.GetCreationTimeUtc(n)); }
-                    catch(Exception ex)
+                    catch (Exception ex)
                     {
                         if (timestampfailures++ < 20)
-                            Console.WriteLine("Failed to set creation time on file {0}: {1}", n, ex.Message); 
+                            Console.WriteLine("Failed to set creation time on file {0}: {1}", n, ex.Message);
                     }
                     try { File.SetLastWriteTimeUtc(tf, System.IO.File.GetLastWriteTimeUtc(n)); }
-                    catch(Exception ex)
+                    catch (Exception ex)
                     {
                         if (timestampfailures++ < 20)
-                            Console.WriteLine("Failed to set write time on file {0}: {1}", n, ex.Message); 
+                            Console.WriteLine("Failed to set write time on file {0}: {1}", n, ex.Message);
                     }
                 }
 
-                foreach(var n in Directory.EnumerateDirectories(c))
+                foreach (var n in Directory.EnumerateDirectories(c))
                     work.Enqueue(n);
             }
 
@@ -164,7 +164,7 @@ namespace Duplicati.UnitTest
         private static int IndexOf(List<string> lst, string m)
         {
             StringComparison sc = Duplicati.Library.Utility.Utility.ClientFilenameStringComparison;
-            for(int i = 0; i < lst.Count; i++)
+            for (int i = 0; i < lst.Count; i++)
                 if (lst[i].Equals(m, sc))
                     return i;
 
@@ -263,14 +263,14 @@ namespace Duplicati.UnitTest
         public static Dictionary<string, string> Expand(this Dictionary<string, string> self, object extra)
         {
             var res = new Dictionary<string, string>(self);
-            foreach(var n in extra.GetType().GetFields())
+            foreach (var n in extra.GetType().GetFields())
             {
                 var name = n.Name.Replace('_', '-');
                 var value = n.GetValue(extra);
                 res[name] = value == null ? "" : value.ToString();
             }
 
-            foreach(var n in extra.GetType().GetProperties())
+            foreach (var n in extra.GetType().GetProperties())
             {
                 var name = n.Name.Replace('_', '-');
                 var value = n.GetValue(extra);
@@ -288,6 +288,44 @@ namespace Duplicati.UnitTest
             using (FileStream fileStream = SystemIO.IO_OS.FileOpenWrite(path))
             {
                 Utility.CopyStream(new MemoryStream(contents), fileStream);
+            }
+        }
+
+        public static void DownloadFile(System.Net.Http.HttpClient client, string destinationFilePath, string url)
+        {
+            // try to workaround a weird intermittent bug where downloaded size
+            // differs from real size but no error is thrown
+            var maxAttempts = 5;
+            while (maxAttempts-- > 0)
+            {
+                DateTime beginTime = DateTime.Now;
+                using (var resp = client.GetAsync(url).Await())
+                {
+                    if (maxAttempts == 5)
+                    {
+                        Console.WriteLine("downloading test file to: {0}, length: {1}", destinationFilePath, resp.Content.Headers.ContentLength);
+                    }
+                    using (var s = resp.Content.ReadAsStreamAsync().Await())
+                    using (var fs = File.OpenWrite(destinationFilePath))
+                    {
+                        s.CopyTo(fs);
+                    }
+                    long length = new System.IO.FileInfo(destinationFilePath).Length;
+                    Console.WriteLine("downloaded test file: {0}: length {1}, duration {2}", destinationFilePath, length, (DateTime.Now - beginTime).TotalSeconds);
+                    if (length == resp.Content.Headers.ContentLength)
+                    {
+                        maxAttempts = -1;
+                    }
+                    else
+                    {
+                        Console.WriteLine("invalid downloaded length {0}, should be {1}...", length, resp.Content.Headers.ContentLength);
+                        System.Threading.Thread.Sleep(120000);
+                    }
+                }
+            }
+            if (maxAttempts == 0)
+            {
+                throw new Exception(string.Format("Unable to download test file from {0}", url));
             }
         }
     }
