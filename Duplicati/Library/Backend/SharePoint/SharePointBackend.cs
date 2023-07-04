@@ -49,7 +49,7 @@ namespace Duplicati.Library.Backend
     /// - Add auth code with access token in event ctx.ExecutingWebRequest
     ///   --> e.WebRequestExecutor.RequestHeaders[“Authorization”] = “Bearer ” + ar.AccessToken;
     /// </remarks>
-    public class SharePointBackend : IBackend, IStreamingBackend
+    public class SharePointBackend : IBackend
     {
 
         #region [Variables and constants declarations]
@@ -116,6 +116,8 @@ namespace Duplicati.Library.Backend
             get { return new string[] { m_orgUrl.Host, string.IsNullOrWhiteSpace(m_spWebUrl) ? null : new Utility.Uri(m_spWebUrl).Host }; }
         }
 
+        public bool SupportsStreaming => true;
+
         #endregion
 
         #region [Constructors]
@@ -127,7 +129,7 @@ namespace Duplicati.Library.Backend
         {
             m_deleteToRecycler = Utility.Utility.ParseBoolOption(options, "delete-to-recycler");
             m_useBinaryDirectMode = Utility.Utility.ParseBoolOption(options, "binary-direct-mode");
-            
+
             try
             {
                 string strSpan;
@@ -222,16 +224,18 @@ namespace Duplicati.Library.Backend
 
         #region [Private helper methods]
 
+        // TODO: Many methods cannot be cancelled yet
+
         /// <summary>
         /// Tries a simple query to test the passed context.
         /// Returns 0 on success, negative if completely invalid, positive if SharePoint error (wrong creds are negative).
         /// </summary>
-        private static int testContextForWeb(SP.ClientContext ctx, bool rethrow = true)
+        private static async Task<int> testContextForWebAsync(SP.ClientContext ctx, bool rethrow = true)
         {
             try
             {
                 ctx.Load(ctx.Web, w => w.Title);
-                ctx.ExecuteQuery(); // should fail and throw if anything wrong.
+                await ctx.ExecuteQueryAsync().ConfigureAwait(false); // should fail and throw if anything wrong.
                 string webTitle = ctx.Web.Title;
                 if (webTitle == null)
                     throw new UnauthorizedAccessException(Strings.SharePoint.WebTitleReadFailedError);
@@ -253,15 +257,15 @@ namespace Duplicati.Library.Backend
         /// Builds a client context and tries a simple query to test if there's a web.
         /// Returns 0 on success, negative if completely invalid, positive if SharePoint error (likely wrong creds).
         /// </summary>
-        private static int testUrlForWeb(string url, System.Net.ICredentials userInfo, bool rethrow, out SP.ClientContext retCtx)
+        private static async Task<KeyValuePair<int, ClientContext>> testUrlForWebAsync(string url, System.Net.ICredentials userInfo, bool rethrow)
         {
             int result = -1;
-            retCtx = null;
+            SP.ClientContext retCtx = null;
             var ctx = CreateNewContext(url);
             try
             {
                 ctx.Credentials = userInfo;
-                result = testContextForWeb(ctx, rethrow);
+                result = await testContextForWebAsync(ctx, rethrow).ConfigureAwait(false);
                 if (result >= 0)
                 {
                     retCtx = ctx;
@@ -270,7 +274,7 @@ namespace Duplicati.Library.Backend
             }
             finally { if (ctx != null) { ctx.Dispose(); } }
 
-            return result;
+            return new KeyValuePair<int, ClientContext>(result, retCtx);
         }
 
         /// <summary>
@@ -285,9 +289,9 @@ namespace Duplicati.Library.Backend
         /// If that won't help, we will try all possible paths from longest
         /// to shortest...
         /// </summary>
-        private static string findCorrectWebPath(Utility.Uri orgUrl, System.Net.ICredentials userInfo, out SP.ClientContext retCtx)
+        private static async Task<KeyValuePair<string, ClientContext>> findCorrectWebPathAsync(Utility.Uri orgUrl, System.Net.ICredentials userInfo)
         {
-            retCtx = null;
+            ClientContext retCtx = null;
 
             string path = orgUrl.Path;
             int webIndicatorPos = path.IndexOf("//", StringComparison.Ordinal);
@@ -295,9 +299,11 @@ namespace Duplicati.Library.Backend
             // if a hint is supplied, we will of course use this first.
             if (webIndicatorPos >= 0)
             {
-                string testUrl = new Utility.Uri(orgUrl.Scheme, orgUrl.Host, path.Substring(0, webIndicatorPos), null, null, null, orgUrl.Port).ToString();
-                if (testUrlForWeb(testUrl, userInfo, false, out retCtx) >= 0)
-                    return testUrl;
+                string testUrl = new Utility.Uri(orgUrl.Scheme, orgUrl.Host, path.Substring(0, webIndicatorPos), port: orgUrl.Port).ToString();
+                var p = await testUrlForWebAsync(testUrl, userInfo, false).ConfigureAwait(false);
+                retCtx = p.Value;
+                if (p.Key >= 0)
+                    return new KeyValuePair<string, ClientContext>(testUrl, retCtx);
             }
 
             // Now go through path and see where we land a success.
@@ -308,9 +314,12 @@ namespace Duplicati.Library.Backend
             {
                 string testUrl = new Utility.Uri(orgUrl.Scheme, orgUrl.Host,
                     string.Join("/", pathParts, 0, docLibrary),
-                    null, null, null, orgUrl.Port).ToString();
-                if (testUrlForWeb(testUrl, userInfo, false, out retCtx) >= 0)
-                    return testUrl;
+                    port: orgUrl.Port).ToString();
+
+                var p = await testUrlForWebAsync(testUrl, userInfo, false).ConfigureAwait(false);
+                retCtx = p.Value;
+                if (p.Key >= 0)
+                    return new KeyValuePair<string, ClientContext>(testUrl, retCtx);
             }
 
             // last but not least: try one after the other.
@@ -320,17 +329,20 @@ namespace Duplicati.Library.Backend
 
                 string testUrl = new Utility.Uri(orgUrl.Scheme, orgUrl.Host,
                     string.Join("/", pathParts, 0, pi),
-                    null, null, null, orgUrl.Port).ToString();
-                if (testUrlForWeb(testUrl, userInfo, false, out retCtx) >= 0)
-                    return testUrl;
+                    port: orgUrl.Port).ToString();
+
+                var p = await testUrlForWebAsync(testUrl, userInfo, false).ConfigureAwait(false);
+                retCtx = p.Value;
+                if (p.Key >= 0)
+                    return new KeyValuePair<string, ClientContext>(testUrl, retCtx);
             }
 
             // nothing worked :(
-            return null;
+            return new KeyValuePair<string, ClientContext>(null, retCtx);
         }
 
         /// <summary> Return the preconfigured SP.ClientContext to use. </summary>
-        private SP.ClientContext getSpClientContext(bool forceNewContext = false)
+        private async Task<ClientContext> getSpClientContextAsync(bool forceNewContext = false)
         {
             if (forceNewContext)
             {
@@ -342,7 +354,9 @@ namespace Duplicati.Library.Backend
             {
                 if (m_spWebUrl == null)
                 {
-                    m_spWebUrl = findCorrectWebPath(m_orgUrl, m_userInfo, out m_spContext);
+                    var p = await findCorrectWebPathAsync(m_orgUrl, m_userInfo).ConfigureAwait(false);
+                    m_spWebUrl = p.Key;
+                    m_spContext = p.Value;
                     if (m_spWebUrl == null)
                         throw new System.Net.WebException(Strings.SharePoint.NoSharePointWebFoundError(m_orgUrl.ToString()));
                 }
@@ -364,9 +378,9 @@ namespace Duplicati.Library.Backend
         /// We have to check for the exceptions thrown to know about file /folder existence.
         /// Why the funny guys at MS provided an .Exists field stays a mystery...
         /// </summary>
-        private void wrappedExecuteQueryOnConext(SP.ClientContext ctx, string serverRelPathInfo, bool isFolder)
+        private async Task wrappedExecuteQueryOnContextAsync(SP.ClientContext ctx, string serverRelPathInfo, bool isFolder)
         {
-            try { ctx.ExecuteQuery(); }
+            try { await ctx.ExecuteQueryAsync().ConfigureAwait(false); }
             catch (ServerException ex)
             {
                 // funny: If a folder is not found, we still get a FileNotFoundException from Server...?!?
@@ -436,16 +450,20 @@ namespace Duplicati.Library.Backend
 
         #region [Public backend methods]
 
-        public void Test()
+        public async Task TestAsync(CancellationToken cancelToken)
         {
-            SP.ClientContext ctx = getSpClientContext(true);
-            testContextForWeb(ctx, true);
+            SP.ClientContext ctx = await getSpClientContextAsync(true).ConfigureAwait(false);
+            cancelToken.ThrowIfCancellationRequested();
+            await testContextForWebAsync(ctx, true).ConfigureAwait(false);
         }
-        
-        public IEnumerable<IFileEntry> List() { return doList(false); }
-        private IEnumerable<IFileEntry> doList(bool useNewContext)
+
+        public Task<IList<IFileEntry>> ListAsync(CancellationToken cancelToken)
+            => doListAsync(false, cancelToken);
+
+        private async Task<IList<IFileEntry>> doListAsync(bool useNewContext, CancellationToken cancelToken)
         {
-            SP.ClientContext ctx = getSpClientContext(useNewContext);
+            SP.ClientContext ctx = await getSpClientContextAsync(useNewContext).ConfigureAwait(false);
+            cancelToken.ThrowIfCancellationRequested();
             SP.Folder remoteFolder = null;
             bool retry = false;
             try
@@ -454,7 +472,7 @@ namespace Duplicati.Library.Backend
                 ctx.Load(remoteFolder, f => f.Exists);
                 ctx.Load(remoteFolder, f => f.Files, f => f.Folders);
 
-                wrappedExecuteQueryOnConext(ctx, m_serverRelPath, true);
+                await wrappedExecuteQueryOnContextAsync(ctx, m_serverRelPath, true).ConfigureAwait(false);
                 if (!remoteFolder.Exists)
                     throw new Interface.FolderMissingException(Strings.SharePoint.MissingElementError(m_serverRelPath, m_spWebUrl));
             }
@@ -466,51 +484,49 @@ namespace Duplicati.Library.Backend
             if (retry)
             {
                 // An exception was caught, and List() should be retried.
-                foreach (IFileEntry file in doList(true))
-                {
-                    yield return file;
-                }
+                return await doListAsync(true, cancelToken).ConfigureAwait(false);
             }
             else
             {
+                List<IFileEntry> list = new List<IFileEntry>();
                 foreach (var f in remoteFolder.Folders.Where(ff => ff.Exists))
                 {
                     FileEntry fe = new FileEntry(f.Name, -1, f.TimeLastModified, f.TimeLastModified); // f.TimeCreated
                     fe.IsFolder = true;
-                    yield return fe;
+                    list.Add(fe);
                 }
                 foreach (var f in remoteFolder.Files.Where(ff => ff.Exists))
                 {
                     FileEntry fe = new FileEntry(f.Name, f.Length, f.TimeLastModified, f.TimeLastModified); // f.TimeCreated
                     fe.IsFolder = false;
-                    yield return fe;
+                    list.Add(fe);
                 }
+                return list;
             }
         }
 
-        public void Get(string remotename, string filename)
-        {
-            using (System.IO.FileStream fs = System.IO.File.Create(filename))
-                Get(remotename, fs);
-        }
-
-        public void Get(string remotename, System.IO.Stream stream) { doGet(remotename, stream, false); }
-        private void doGet(string remotename, System.IO.Stream stream, bool useNewContext)
+        public Task GetAsync(string remotename, Stream destination, CancellationToken cancelToken)
+            => doGetAsync(remotename, destination, false, cancelToken);
+        private async Task doGetAsync(string remotename, System.IO.Stream stream, bool useNewContext, CancellationToken cancelToken)
         {
             string fileurl = m_serverRelPath + System.Web.HttpUtility.UrlPathEncode(remotename);
-            SP.ClientContext ctx = getSpClientContext(useNewContext);
+            SP.ClientContext ctx = await getSpClientContextAsync(useNewContext).ConfigureAwait(false);
+            cancelToken.ThrowIfCancellationRequested();
             try
             {
                 SP.File remoteFile = ctx.Web.GetFileByServerRelativeUrl(fileurl);
+                // TODO: Is this a network operation?
                 ctx.Load(remoteFile, f => f.Exists);
-                wrappedExecuteQueryOnConext(ctx, fileurl, false);
+                cancelToken.ThrowIfCancellationRequested();
+                await wrappedExecuteQueryOnContextAsync(ctx, fileurl, false).ConfigureAwait(false);
                 if (!remoteFile.Exists)
                     throw new Interface.FileMissingException(Strings.SharePoint.MissingElementError(fileurl, m_spWebUrl));
             }
             catch (ServerException) { throw; /* rethrow if Server answered */ }
             catch (Interface.FileMissingException) { throw; }
             catch (Interface.FolderMissingException) { throw; }
-            catch { if (!useNewContext) /* retry */ doGet(remotename, stream, true); else throw; }
+            catch (OperationCanceledException) { throw; }
+            catch { if (!useNewContext) /* retry */ await doGetAsync(remotename, stream, true, cancelToken).ConfigureAwait(false); else throw; }
 
             byte[] copybuffer = new byte[Duplicati.Library.Utility.Utility.DEFAULT_BUFFER_SIZE];
             using (var fileInfo = SP.File.OpenBinaryDirect(ctx, fileurl))
@@ -524,19 +540,22 @@ namespace Duplicati.Library.Backend
                 await PutAsync(remotename, fs, cancelToken);
         }
 
-        public Task PutAsync(string remotename, Stream stream, CancellationToken cancelToken) { return doPut(remotename, stream, false, cancelToken); }
-        private async Task doPut(string remotename, Stream stream, bool useNewContext, CancellationToken cancelToken)
+        public Task PutAsync(string remotename, Stream stream, CancellationToken cancelToken)
+            => doPutAsync(remotename, stream, false, cancelToken);
+        private async Task doPutAsync(string remotename, Stream stream, bool useNewContext, CancellationToken cancelToken)
         {
             string fileurl = m_serverRelPath + System.Web.HttpUtility.UrlPathEncode(remotename);
-            SP.ClientContext ctx = getSpClientContext(useNewContext);
+            SP.ClientContext ctx = await getSpClientContextAsync(useNewContext).ConfigureAwait(false);
+            cancelToken.ThrowIfCancellationRequested();
             try
             {
                 SP.Folder remoteFolder = ctx.Web.GetFolderByServerRelativeUrl(m_serverRelPath);
                 ctx.Load(remoteFolder, f => f.Exists, f => f.ServerRelativeUrl);
-                wrappedExecuteQueryOnConext(ctx, m_serverRelPath, true);
+                await wrappedExecuteQueryOnContextAsync(ctx, m_serverRelPath, true).ConfigureAwait(false);
+                cancelToken.ThrowIfCancellationRequested();
                 if (!remoteFolder.Exists)
                     throw new Interface.FolderMissingException(Strings.SharePoint.MissingElementError(m_serverRelPath, m_spWebUrl));
-                
+
                 useNewContext = true; // disable retry
                 if (!m_useBinaryDirectMode)
                     await uploadFileSlicePerSlice(ctx, remoteFolder, stream, fileurl, cancelToken).ConfigureAwait(false);
@@ -544,7 +563,8 @@ namespace Duplicati.Library.Backend
             catch (ServerException) { throw; /* rethrow if Server answered */ }
             catch (Interface.FileMissingException) { throw; }
             catch (Interface.FolderMissingException) { throw; }
-            catch { if (!useNewContext) /* retry */ { await doPut(remotename, stream, true, cancelToken).ConfigureAwait(false); } else throw; }
+            catch (OperationCanceledException) { throw; }
+            catch { if (!useNewContext) /* retry */ { await doPutAsync(remotename, stream, true, cancelToken).ConfigureAwait(false); } else throw; }
 
             if (m_useBinaryDirectMode)
             {
@@ -618,7 +638,7 @@ namespace Duplicati.Library.Backend
                     if (bytesUploaded == null)
                         ctx.Load(uploadFile, f => f.Length);
 
-                    ctx.ExecuteQuery();
+                    await ctx.ExecuteQueryAsync().ConfigureAwait(false);
                     // Check consistency and update fileoffset for the next slice.
                     if (bytesUploaded != null)
                     {
@@ -634,7 +654,7 @@ namespace Duplicati.Library.Backend
                 // End sliced upload by calling FinishUpload.
                 uploadFile = uploadFile.FinishUpload(uploadId, fileoffset, new MemoryStream(0));
                 ctx.Load(uploadFile, f => f.Length);
-                ctx.ExecuteQuery();
+                await ctx.ExecuteQueryAsync().ConfigureAwait(false);
             }
 
             if (uploadFile.Length != fileoffset)
@@ -643,10 +663,12 @@ namespace Duplicati.Library.Backend
             return uploadFile;
         }
 
-        public void CreateFolder() { doCreateFolder(false); }
-        private void doCreateFolder(bool useNewContext)
+        public Task CreateFolderAsync(CancellationToken cancelToken)
+            => doCreateFolderAsync(false, cancelToken);
+        private async Task doCreateFolderAsync(bool useNewContext, CancellationToken cancelToken)
         {
-            SP.ClientContext ctx = getSpClientContext(useNewContext);
+            SP.ClientContext ctx = await getSpClientContextAsync(useNewContext).ConfigureAwait(false);
+            cancelToken.ThrowIfCancellationRequested();
             try
             {
                 int pathLengthToWeb = new Utility.Uri(m_spWebUrl).Path.Split(new char[] { '/' }, StringSplitOptions.RemoveEmptyEntries).Length;
@@ -665,9 +687,11 @@ namespace Duplicati.Library.Backend
                     var folder = ctx.Web.GetFolderByServerRelativeUrl(folderRelPath);
                     spfolders[fi] = folder;
                     ctx.Load(folder, f => f.Exists);
-                    try { wrappedExecuteQueryOnConext(ctx, folderRelPath, true); }
+                    try { await wrappedExecuteQueryOnContextAsync(ctx, folderRelPath, true); }
                     catch (FolderMissingException)
                     { break; }
+                    cancelToken.ThrowIfCancellationRequested();
+
                     if (!folder.Exists) break;
                 }
 
@@ -675,7 +699,7 @@ namespace Duplicati.Library.Backend
                     spfolders[fi] = spfolders[fi - 1].Folders.Add(folderNames[fi]);
                 ctx.Load(spfolders[folderNames.Length - 1], f => f.Exists);
 
-                wrappedExecuteQueryOnConext(ctx, m_serverRelPath, true);
+                await wrappedExecuteQueryOnContextAsync(ctx, m_serverRelPath, true);
 
                 if (!spfolders[folderNames.Length - 1].Exists)
                     throw new Interface.FolderMissingException(Strings.SharePoint.MissingElementError(m_serverRelPath, m_spWebUrl));
@@ -683,32 +707,38 @@ namespace Duplicati.Library.Backend
             catch (ServerException) { throw; /* rethrow if Server answered */ }
             catch (Interface.FileMissingException) { throw; }
             catch (Interface.FolderMissingException) { throw; }
-            catch { if (!useNewContext) /* retry */ doCreateFolder(true); else throw; }
+            catch (OperationCanceledException) { throw; }
+            catch { if (!useNewContext) /* retry */ await doCreateFolderAsync(true, cancelToken).ConfigureAwait(false); else throw; }
         }
 
-        public void Delete(string remotename) { doDelete(remotename, false); }
-        private void doDelete(string remotename, bool useNewContext)
+        public Task DeleteAsync(string remotename, CancellationToken cancelToken)
+            => doDeleteAsync(remotename, false, cancelToken);
+
+        private async Task doDeleteAsync(string remotename, bool useNewContext, CancellationToken cancelToken)
         {
-            SP.ClientContext ctx = getSpClientContext(useNewContext);
+            SP.ClientContext ctx = await getSpClientContextAsync(useNewContext).ConfigureAwait(false);
+            cancelToken.ThrowIfCancellationRequested();
             try
             {
                 string fileurl = m_serverRelPath + System.Web.HttpUtility.UrlPathEncode(remotename);
                 SP.File remoteFile = ctx.Web.GetFileByServerRelativeUrl(fileurl);
                 ctx.Load(remoteFile);
-                wrappedExecuteQueryOnConext(ctx, fileurl, false);
+                await wrappedExecuteQueryOnContextAsync(ctx, fileurl, false).ConfigureAwait(false);
                 if (!remoteFile.Exists)
                     throw new Interface.FileMissingException(Strings.SharePoint.MissingElementError(fileurl, m_spWebUrl));
+                cancelToken.ThrowIfCancellationRequested();
 
                 if (m_deleteToRecycler) remoteFile.Recycle();
                 else remoteFile.DeleteObject();
 
-                ctx.ExecuteQuery();
+                await ctx.ExecuteQueryAsync();
 
             }
             catch (ServerException) { throw; /* rethrow if Server answered */ }
             catch (Interface.FileMissingException) { throw; }
             catch (Interface.FolderMissingException) { throw; }
-            catch { if (!useNewContext) /* retry */ doDelete(remotename, true); else throw; }
+            catch (OperationCanceledException) { throw; }
+            catch { if (!useNewContext) /* retry */ await doDeleteAsync(remotename, true, cancelToken).ConfigureAwait(false); else throw; }
         }
 
         #endregion

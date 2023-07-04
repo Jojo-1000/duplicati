@@ -10,6 +10,7 @@ using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -20,7 +21,7 @@ namespace Duplicati.Library.Backend.TencentCOS
     /// en: https://intl.cloud.tencent.com/document/product/436
     /// zh: https://cloud.tencent.com/document/product/436
     /// </summary>
-    public class COS : IBackend, IStreamingBackend, IRenameEnabledBackend
+    public class COS : IBackend, IBackendPagination, IRenameEnabledBackend
     {
         private static readonly string LOGTAG = Logging.Log.LogTagFromType<COS>();
 
@@ -156,14 +157,19 @@ namespace Duplicati.Library.Backend.TencentCOS
 
             return new CosXmlServer(config, cosCredentialProvider);
         }
+        public Task<IList<IFileEntry>> ListAsync(CancellationToken cancelToken)
+            => this.CondensePaginatedListAsync(cancelToken);
 
-        public IEnumerable<IFileEntry> List()
+        public async IAsyncEnumerable<IFileEntry> ListEnumerableAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancelToken)
         {
             bool isTruncated = true;
             string filename = null;
 
             while (isTruncated)
             {
+                // Cancel paging early if requested
+                cancelToken.ThrowIfCancellationRequested();
+
                 cosXml = GetCosXml();
                 string bucket = _cosOptions.Bucket;
                 string prefix = _cosOptions.Path;
@@ -182,7 +188,8 @@ namespace Duplicati.Library.Backend.TencentCOS
                     request.SetPrefix(prefix);
                 }
 
-                GetBucketResult result = cosXml.GetBucket(request);
+                GetBucketResult result = await WrapAsyncCosxmlMethod<GetBucketRequest, GetBucketResult>(
+                    request, cosXml.GetBucket, cancelToken).ConfigureAwait(false);
 
                 ListBucket info = result.listBucket;
 
@@ -209,19 +216,7 @@ namespace Duplicati.Library.Backend.TencentCOS
             }
         }
 
-        public async Task PutAsync(string remotename, string filename, CancellationToken cancelToken)
-        {
-            using (FileStream fs = File.Open(filename, FileMode.Open, FileAccess.Read, FileShare.Read))
-                await PutAsync(remotename, fs, cancelToken);
-        }
-
-        public void Get(string remotename, string filename)
-        {
-            using (var fs = File.Open(filename, FileMode.Create, FileAccess.Write, FileShare.None))
-                Get(remotename, fs);
-        }
-
-        public void Delete(string remotename)
+        public async Task DeleteAsync(string remotename, CancellationToken cancelToken)
         {
             try
             {
@@ -233,7 +228,8 @@ namespace Duplicati.Library.Backend.TencentCOS
 
                 request.SetSign(TimeUtils.GetCurrentTime(TimeUnit.SECONDS), 600);
 
-                DeleteObjectResult result = cosXml.DeleteObject(request);
+                DeleteObjectResult result = await WrapAsyncCosxmlMethod<DeleteObjectRequest, DeleteObjectResult>(
+                    request, cosXml.DeleteObject, cancelToken).ConfigureAwait(false);
             }
             catch (COSXML.CosException.CosClientException clientEx)
             {
@@ -247,7 +243,7 @@ namespace Duplicati.Library.Backend.TencentCOS
             }
         }
 
-        public void Test()
+        public async Task TestAsync(CancellationToken cancelToken)
         {
             var json = JsonConvert.SerializeObject(_cosOptions);
             try
@@ -256,7 +252,9 @@ namespace Duplicati.Library.Backend.TencentCOS
                 string bucket = _cosOptions.Bucket;
                 HeadBucketRequest request = new HeadBucketRequest(bucket);
                 request.SetSign(TimeUtils.GetCurrentTime(TimeUnit.SECONDS), 600);
-                HeadBucketResult result = cosXml.HeadBucket(request);
+
+                HeadBucketResult result = await WrapAsyncCosxmlMethod<HeadBucketRequest, HeadBucketResult>(
+                    request, cosXml.HeadBucket, cancelToken).ConfigureAwait(false);
 
                 Logging.Log.WriteInformationMessage(LOGTAG, "Test", "Request complete {0}: {1}, {2}", result.httpCode, json, result.GetResultInfo());
             }
@@ -272,9 +270,10 @@ namespace Duplicati.Library.Backend.TencentCOS
             }
         }
 
-        public void CreateFolder()
+        public Task CreateFolderAsync(CancellationToken cancelToken)
         {
             // No need to create folders
+            return Task.CompletedTask;
         }
 
         public void Dispose()
@@ -285,7 +284,7 @@ namespace Duplicati.Library.Backend.TencentCOS
             }
         }
 
-        public Task PutAsync(string remotename, Stream stream, CancellationToken cancelToken)
+        public async Task PutAsync(string remotename, Stream stream, CancellationToken cancelToken)
         {
             try
             {
@@ -308,7 +307,8 @@ namespace Duplicati.Library.Backend.TencentCOS
                     request.SetRequestHeader("x-" + COS_STORAGE_CLASS, _cosOptions.StorageClass);
                 }
 
-                PutObjectResult result = cosXml.PutObject(request);
+                PutObjectResult result = await WrapAsyncCosxmlMethod<PutObjectRequest, PutObjectResult>(
+                    request, cosXml.PutObject, cancelToken).ConfigureAwait(false);
             }
             catch (COSXML.CosException.CosClientException clientEx)
             {
@@ -320,11 +320,9 @@ namespace Duplicati.Library.Backend.TencentCOS
                 Logging.Log.WriteErrorMessage(LOGTAG, "PutAsync", serverEx, "Put failed: {0}, {1}", remotename, serverEx.GetInfo());
                 throw;
             }
-
-            return Task.CompletedTask;
         }
 
-        public void Get(string remotename, Stream stream)
+        public async Task GetAsync(string remotename, Stream destination, CancellationToken cancelToken)
         {
             try
             {
@@ -336,12 +334,14 @@ namespace Duplicati.Library.Backend.TencentCOS
 
                 request.SetSign(TimeUtils.GetCurrentTime(TimeUnit.SECONDS), KEY_DURATION_SECOND);
 
-                GetObjectBytesResult result = cosXml.GetObject(request);
+
+                GetObjectBytesResult result = await WrapAsyncCosxmlMethod<GetObjectBytesRequest, GetObjectBytesResult>(
+                    request, cosXml.GetObject, cancelToken).ConfigureAwait(false);
 
                 byte[] bytes = result.content;
 
                 Stream ms = new MemoryStream(bytes);
-                Utility.Utility.CopyStream(ms, stream);
+                await Utility.Utility.CopyStreamAsync(ms, destination, cancelToken);
             }
             catch (COSXML.CosException.CosClientException clientEx)
             {
@@ -355,7 +355,7 @@ namespace Duplicati.Library.Backend.TencentCOS
             }
         }
 
-        public void Rename(string oldname, string newname)
+        public async Task RenameAsync(string oldname, string newname, CancellationToken cancelToken)
         {
             try
             {
@@ -375,11 +375,13 @@ namespace Duplicati.Library.Backend.TencentCOS
                 request.SetCopySource(copySource);
                 request.SetCopyMetaDataDirective(COSXML.Common.CosMetaDataDirective.COPY);
 
-                CopyObjectResult result = cosXml.CopyObject(request);
+                // TODO: Use async method
+                CopyObjectResult result = await WrapAsyncCosxmlMethod<CopyObjectRequest, CopyObjectResult>(
+                    request, cosXml.CopyObject, cancelToken).ConfigureAwait(false);
 
                 //Console.WriteLine(result.GetResultInfo());
 
-                Delete(oldname);
+                await DeleteAsync(oldname, cancelToken).ConfigureAwait(false);
             }
             catch (COSXML.CosException.CosClientException clientEx)
             {
@@ -416,6 +418,8 @@ namespace Duplicati.Library.Backend.TencentCOS
 
         public string[] DNSName => null;
 
+        public bool SupportsStreaming => true;
+
         private string GetFullKey(string name)
         {
             if (string.IsNullOrWhiteSpace(_cosOptions?.Path))
@@ -423,6 +427,48 @@ namespace Duplicati.Library.Backend.TencentCOS
                 return name;
             }
             return _cosOptions.Path + name;
+        }
+
+        /// <summary>
+        /// Wraps an async method of cosXml into a task that can be cancelled
+        /// </summary>
+        /// <typeparam name="ResultT">Subtype of CosResult</typeparam>
+        /// <typeparam name="RequestT">Subtype of CosRequest</typeparam>
+        /// <param name="request">Request to pass to method</param>
+        /// <param name="asyncMethod">Async method to call</param>
+        /// <param name="cancelToken">Cancel token</param>
+        /// <returns></returns>
+        private async Task<ResultT> WrapAsyncCosxmlMethod<RequestT, ResultT>(RequestT request,
+            Action<RequestT, COSXML.Callback.OnSuccessCallback<COSXML.Model.CosResult>, COSXML.Callback.OnFailedCallback> asyncMethod,
+            CancellationToken cancelToken)
+            where ResultT : COSXML.Model.CosResult
+            where RequestT : COSXML.Model.CosRequest
+        {
+            var src = new TaskCompletionSource<ResultT>();
+            using (cancelToken.Register(() => cosXml.Cancel(request), false))
+            {
+                asyncMethod(request,
+                    result =>
+                    {
+                        src.TrySetResult(result as ResultT);
+                    },
+                    (COSXML.CosException.CosClientException clientException, COSXML.CosException.CosServerException serverException) =>
+                    {
+                        if (clientException.errorCode == (int)COSXML.Common.CosClientError.USER_CANCELLED)
+                        {
+                            src.TrySetCanceled(cancelToken);
+                        }
+                        else if (clientException != null)
+                        {
+                            src.TrySetException(clientException);
+                        }
+                        else if (serverException != null)
+                        {
+                            src.TrySetException(serverException);
+                        }
+                    });
+                return await src.Task;
+            }
         }
     }
 }
