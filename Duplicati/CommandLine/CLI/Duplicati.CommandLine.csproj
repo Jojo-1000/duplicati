@@ -47,12 +47,12 @@
     </ProjectReference>
     <ProjectReference Include="..\..\Library\Backend\S3\Duplicati.Library.Backend.S3.csproj">
     </ProjectReference>
-    <!--<ProjectReference Include="..\..\Library\Backend\SSHv2\Duplicati.Library.Backend.SSHv2.csproj">
+    <ProjectReference Include="..\..\Library\Backend\SSHv2\Duplicati.Library.Backend.SSHv2.csproj">
     </ProjectReference>
     <ProjectReference Include="..\..\Library\Backend\TahoeLAFS\Duplicati.Library.Backend.TahoeLAFS.csproj">
     </ProjectReference>
     <ProjectReference Include="..\..\Library\Backend\WEBDAV\Duplicati.Library.Backend.WEBDAV.csproj">
-    </ProjectReference>-->
+    </ProjectReference>
     <ProjectReference Include="..\BackendTool\Duplicati.CommandLine.BackendTool.csproj">
     </ProjectReference>
     <ProjectReference Include="..\BackendTester\Duplicati.CommandLine.BackendTester.csproj">
@@ -83,8 +83,10 @@
     </ProjectReference>
     <ProjectReference Include="..\..\Tools\Duplicati.Tools.csproj">
     </ProjectReference>
-    <!--<ProjectReference Include="..\..\Library\Backend\Tardigrade\Duplicati.Library.Backend.Tardigrade.csproj">
-    </ProjectReference>-->
+    <ProjectReference Include="..\..\Library\Backend\Tardigrade\Duplicati.Library.Backend.Tardigrade.csproj">
+    </ProjectReference>
+    <ProjectReference Include="..\..\Library\Backend\Storj\Duplicati.Library.Backend.Storj.csproj">
+    </ProjectReference>
   </ItemGroup>
   
   <ItemGroup>

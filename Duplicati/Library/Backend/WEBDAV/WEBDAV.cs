@@ -19,15 +19,17 @@
 #endregion
 using Duplicati.Library.Common.IO;
 using Duplicati.Library.Interface;
+using Duplicati.Library.Utility;
 using System;
 using System.Collections.Generic;
 using System.Net;
+using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace Duplicati.Library.Backend
 {
-    public class WEBDAV : IBackend, IStreamingBackend
+    public class WEBDAV : IBackend
     {
         private readonly System.Net.NetworkCredential m_userInfo;
         private readonly string m_url;
@@ -56,6 +58,8 @@ namespace Duplicati.Library.Backend
         //
         //private static readonly byte[] PROPFIND_BODY = System.Text.Encoding.UTF8.GetBytes("<?xml version=\"1.0\"?><D:propfind xmlns:D=\"DAV:\"><D:allprop/></D:propfind>");
         private static readonly byte[] PROPFIND_BODY = new byte[0];
+
+        private readonly HttpClient m_client;
 
         public WEBDAV()
         {
@@ -86,7 +90,7 @@ namespace Duplicati.Library.Backend
                         m_userInfo.Password = options["auth-password"];
                 }
             }
-            
+
             //Bugfix, see http://connect.microsoft.com/VisualStudio/feedback/details/695227/networkcredential-default-constructor-leaves-domain-null-leading-to-null-object-reference-exceptions-in-framework-code
             if (m_userInfo != null)
                 m_userInfo.Domain = "";
@@ -114,6 +118,42 @@ namespace Duplicati.Library.Backend
             m_sanitizedUrl = new Utility.Uri(m_useSSL ? "https" : "http", u.Host, m_path).ToString();
             m_reverseProtocolUrl = new Utility.Uri(m_useSSL ? "http" : "https", u.Host, m_path).ToString();
             options.TryGetValue("debug-propfind-file", out m_debugPropfindFile);
+
+
+            bool preAuthenticate = false;
+            ICredentials credential;
+            if (m_useIntegratedAuthentication)
+            {
+                credential = null;
+            }
+            else if (m_forceDigestAuthentication)
+            {
+                System.Net.CredentialCache cred = new System.Net.CredentialCache();
+                cred.Add(new System.Uri(m_url), "Digest", m_userInfo);
+                credential = cred;
+            }
+            else
+            {
+                credential = m_userInfo;
+                //We need this under Mono for some reason,
+                // and it appears some servers require this as well
+                preAuthenticate = true;
+            }
+
+            m_client = new HttpClient(new HttpClientHandler()
+            {
+                // Disable cookies to prevent unexpected behavior
+                UseCookies = false,
+                UseDefaultCredentials = m_useIntegratedAuthentication,
+                Credentials = credential,
+                PreAuthenticate = preAuthenticate
+            })
+            {
+                BaseAddress = new System.Uri(m_url)
+            };
+
+            m_client.DefaultRequestHeaders.ConnectionClose = true;
+            m_client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "Duplicati WEBDAV Client v" + System.Reflection.Assembly.GetExecutingAssembly().GetName().Version);
         }
 
         #region IBackend Members
@@ -128,57 +168,57 @@ namespace Duplicati.Library.Backend
             get { return "webdav"; }
         }
 
-        public IEnumerable<IFileEntry> List()
+        public Task<IList<IFileEntry>> ListAsync(CancellationToken cancelToken)
         {
             try
             {
-                return this.ListWithouExceptionCatch();
+                return ListWithouExceptionCatch(CancellationToken.None);
             }
-            catch (System.Net.WebException wex)
+            catch (HttpRequestStatusException wex)
             {
-                if (wex.Response as System.Net.HttpWebResponse != null &&
-                        ((wex.Response as System.Net.HttpWebResponse).StatusCode == System.Net.HttpStatusCode.NotFound || (wex.Response as System.Net.HttpWebResponse).StatusCode == System.Net.HttpStatusCode.Conflict))
-                    throw new Interface.FolderMissingException(Strings.WEBDAV.MissingFolderError(m_path, wex.Message), wex);
+                if (wex.Response.StatusCode == System.Net.HttpStatusCode.NotFound || wex.Response.StatusCode == System.Net.HttpStatusCode.Conflict)
+                    throw new FolderMissingException(Strings.WEBDAV.MissingFolderError(m_path, wex.Message), wex);
 
-                if (wex.Response as System.Net.HttpWebResponse != null && (wex.Response as System.Net.HttpWebResponse).StatusCode == System.Net.HttpStatusCode.MethodNotAllowed)
-                    throw new UserInformationException(Strings.WEBDAV.MethodNotAllowedError((wex.Response as System.Net.HttpWebResponse).StatusCode), "WebdavMethodNotAllowed", wex);
+                if (wex.Response.StatusCode == System.Net.HttpStatusCode.MethodNotAllowed)
+                    throw new UserInformationException(Strings.WEBDAV.MethodNotAllowedError(wex.Response.StatusCode), "WebdavMethodNotAllowed", wex);
 
                 throw;
             }
         }
 
-        private IEnumerable<IFileEntry> ListWithouExceptionCatch()
+        private async Task<IList<IFileEntry>> ListWithouExceptionCatch(CancellationToken cancelToken)
         {
-            var req = CreateRequest("");
+            var req = CreateRequest(new HttpMethod("PROPFIND"), "");
 
-            req.Method = "PROPFIND";
             req.Headers.Add("Depth", "1");
-            req.ContentType = "text/xml";
-            req.ContentLength = PROPFIND_BODY.Length;
-
-            var areq = new Utility.AsyncHttpRequest(req);
-            using (System.IO.Stream s = areq.GetRequestStream())
-                s.Write(PROPFIND_BODY, 0, PROPFIND_BODY.Length);
-
             var doc = new System.Xml.XmlDocument();
-            using (var resp = (System.Net.HttpWebResponse)areq.GetResponse())
+
+            using (var body = new ByteArrayContent(PROPFIND_BODY))
             {
-                int code = (int)resp.StatusCode;
-                if (code < 200 || code >= 300) //For some reason Mono does not throw this automatically
-                    throw new System.Net.WebException(resp.StatusDescription, null, System.Net.WebExceptionStatus.ProtocolError, resp);
+                req.Content = body;
+                body.Headers.ContentType = System.Net.Http.Headers.MediaTypeHeaderValue.Parse("text/xml");
+                body.Headers.ContentLength = PROPFIND_BODY.Length;
 
-                if (!string.IsNullOrEmpty(m_debugPropfindFile))
+                using (var resp = await m_client.SendAsync(req, cancelToken).ConfigureAwait(false))
                 {
-                    using (var rs = areq.GetResponseStream())
-                    using (var fs = new System.IO.FileStream(m_debugPropfindFile, System.IO.FileMode.Create, System.IO.FileAccess.Write, System.IO.FileShare.None))
-                        Utility.Utility.CopyStream(rs, fs, false, m_copybuffer);
+                    if (!resp.IsSuccessStatusCode)
+                    {
+                        throw new HttpRequestStatusException(resp);
+                    }
 
-                    doc.Load(m_debugPropfindFile);
-                }
-                else
-                {
-                    using (var rs = areq.GetResponseStream())
-                        doc.Load(rs);
+                    if (!string.IsNullOrEmpty(m_debugPropfindFile))
+                    {
+                        using (var rs = await resp.Content.ReadAsStreamAsync().ConfigureAwait(false))
+                        using (var fs = new System.IO.FileStream(m_debugPropfindFile, System.IO.FileMode.Create, System.IO.FileAccess.Write, System.IO.FileShare.None))
+                            await Utility.Utility.CopyStreamAsync(rs, fs, false, cancelToken, m_copybuffer).ConfigureAwait(false);
+
+                        doc.Load(m_debugPropfindFile);
+                    }
+                    else
+                    {
+                        using (var rs = await resp.Content.ReadAsStreamAsync().ConfigureAwait(false))
+                            doc.Load(rs);
+                    }
                 }
             }
 
@@ -252,51 +292,57 @@ namespace Duplicati.Library.Backend
                 files.Add(fe);
                 m_filenamelist.Add(name);
             }
-            
+
             return files;
         }
 
-        public async Task PutAsync(string remotename, string filename, CancellationToken cancelToken)
+        public async Task PutAsync(string remotename, System.IO.Stream stream, CancellationToken cancelToken)
         {
-            using (System.IO.FileStream fs = System.IO.File.OpenRead(filename))
-                await PutAsync(remotename, fs, cancelToken);
+            var req = CreateRequest(HttpMethod.Put, remotename);
+            using (var body = new StreamContent(stream))
+            using (var resp = await m_client.SendAsync(req, cancelToken).ConfigureAwait(false))
+            {
+                if (resp.StatusCode == HttpStatusCode.Conflict || resp.StatusCode == HttpStatusCode.NotFound)
+                    throw new FolderMissingException(Strings.WEBDAV.MissingFolderError(m_path, resp.ReasonPhrase));
+                else if (!resp.IsSuccessStatusCode)
+                    throw new HttpRequestStatusException(resp);
+            }
         }
 
-        public void Get(string remotename, string filename)
+        public async Task GetAsync(string remotename, System.IO.Stream destination, CancellationToken cancelToken)
         {
-            using (System.IO.FileStream fs = System.IO.File.Create(filename))
-                Get(remotename, fs);
+            var req = CreateRequest(HttpMethod.Get, remotename);
+
+            using (var resp = await m_client.SendAsync(req, cancelToken).ConfigureAwait(false))
+            {
+                if (resp.StatusCode == HttpStatusCode.Conflict)
+                    throw new FileMissingException(Strings.WEBDAV.MissingFolderError(m_path, resp.ReasonPhrase));
+                else if (resp.StatusCode == HttpStatusCode.NotFound && m_filenamelist != null && m_filenamelist.Contains(remotename))
+                    throw new Exception(Strings.WEBDAV.SeenThenNotFoundError(m_path, remotename, System.IO.Path.GetExtension(remotename), resp.ReasonPhrase));
+                else if (!resp.IsSuccessStatusCode)
+                    throw new HttpRequestStatusException(resp);
+
+                using (var s = await resp.Content.ReadAsStreamAsync().ConfigureAwait(false))
+                    await Utility.Utility.CopyStreamAsync(s, destination, true, cancelToken, m_copybuffer).ConfigureAwait(false);
+            }
         }
 
-        public void Delete(string remotename)
+        public async Task DeleteAsync(string remotename, CancellationToken cancelToken)
         {
-            try
+            var req = CreateRequest(HttpMethod.Delete, remotename);
+            using (var resp = await m_client.SendAsync(req, cancelToken).ConfigureAwait(false))
             {
-                System.Net.HttpWebRequest req = CreateRequest(remotename);
-                req.Method = "DELETE";
-                Utility.AsyncHttpRequest areq = new Utility.AsyncHttpRequest(req);
-                using (System.Net.HttpWebResponse resp = (System.Net.HttpWebResponse)areq.GetResponse())
-                {
-                    if (resp.StatusCode == System.Net.HttpStatusCode.NotFound)
-                        throw new FileMissingException();
+                if (resp.StatusCode == System.Net.HttpStatusCode.NotFound)
+                    throw new FileMissingException();
 
-                    int code = (int)resp.StatusCode;
-                    if (code < 200 || code >= 300) //For some reason Mono does not throw this automatically
-                        throw new System.Net.WebException(resp.StatusDescription, null, System.Net.WebExceptionStatus.ProtocolError, resp);
-                }
-            } 
-            catch (System.Net.WebException wex)
-            {
-                if (wex.Response is HttpWebResponse response && response.StatusCode == System.Net.HttpStatusCode.NotFound)
-                    throw new FileMissingException(wex);
-                else
-                    throw;
+                if (!resp.IsSuccessStatusCode)
+                    throw new HttpRequestStatusException(resp);
             }
         }
 
         public IList<ICommandLineArgument> SupportedCommands
         {
-            get 
+            get
             {
                 return new List<ICommandLineArgument>(new ICommandLineArgument[] {
                     new CommandLineArgument("auth-password", CommandLineArgument.ArgumentType.Password, Strings.WEBDAV.DescriptionAuthPasswordShort, Strings.WEBDAV.DescriptionAuthPasswordLong),
@@ -314,27 +360,23 @@ namespace Duplicati.Library.Backend
             get { return Strings.WEBDAV.Description; }
         }
 
-        public string[] DNSName 
+        public string[] DNSName
         {
             get { return new string[] { m_dnsName }; }
         }
 
-        public void Test()
-        {
-            this.List();
-        }
+        public bool SupportsStreaming => true;
 
-        public void CreateFolder()
+        public Task TestAsync(CancellationToken cancelToken)
+            => this.TestListAsync(cancelToken);
+
+        public async Task CreateFolderAsync(CancellationToken cancelToken)
         {
-            System.Net.HttpWebRequest req = CreateRequest("");
-            req.Method = System.Net.WebRequestMethods.Http.MkCol;
-            req.KeepAlive = false;
-            Utility.AsyncHttpRequest areq = new Utility.AsyncHttpRequest(req);
-            using (System.Net.HttpWebResponse resp = (System.Net.HttpWebResponse)areq.GetResponse())
+            var req = CreateRequest(new HttpMethod(WebRequestMethods.Http.MkCol), "");
+            using (var resp = await m_client.SendAsync(req, cancelToken).ConfigureAwait(false))
             {
-                int code = (int)resp.StatusCode;
-                if (code < 200 || code >= 300) //For some reason Mono does not throw this automatically
-                    throw new System.Net.WebException(resp.StatusDescription, null, System.Net.WebExceptionStatus.ProtocolError, resp);
+                if (!resp.IsSuccessStatusCode)
+                    throw new HttpRequestStatusException(resp);
             }
         }
 
@@ -344,112 +386,14 @@ namespace Duplicati.Library.Backend
 
         public void Dispose()
         {
+            m_client.Dispose();
         }
 
         #endregion
 
-        private System.Net.HttpWebRequest CreateRequest(string remotename)
+        private HttpRequestMessage CreateRequest(HttpMethod method, string remotename)
         {
-            System.Net.HttpWebRequest req = (System.Net.HttpWebRequest)System.Net.HttpWebRequest.Create(m_url + Library.Utility.Uri.UrlEncode(remotename).Replace("+", "%20"));
-            if (m_useIntegratedAuthentication)
-            {
-                req.UseDefaultCredentials = true;
-            }
-            else if (m_forceDigestAuthentication)
-            {
-                System.Net.CredentialCache cred = new System.Net.CredentialCache();
-                cred.Add(new Uri(m_url), "Digest", m_userInfo);
-                req.Credentials = cred;
-            }
-            else
-            {
-                req.Credentials = m_userInfo;
-                //We need this under Mono for some reason,
-                // and it appears some servers require this as well
-                req.PreAuthenticate = true; 
-            }
-
-            req.KeepAlive = false;
-            req.UserAgent = "Duplicati WEBDAV Client v" + System.Reflection.Assembly.GetExecutingAssembly().GetName().Version;
-
-            return req;
+            return new HttpRequestMessage(method, Utility.Uri.UrlEncode(remotename, spacevalue: "%20"));
         }
-
-        #region IStreamingBackend Members
-
-        public async Task PutAsync(string remotename, System.IO.Stream stream, CancellationToken cancelToken)
-        {
-            try
-            {
-                System.Net.HttpWebRequest req = CreateRequest(remotename);
-                req.Method = System.Net.WebRequestMethods.Http.Put;
-                req.ContentType = "application/octet-stream";
-
-                try { req.ContentLength = stream.Length; }
-                catch { }
-
-                Utility.AsyncHttpRequest areq = new Utility.AsyncHttpRequest(req);
-                using (System.IO.Stream s = areq.GetRequestStream())
-                    await Utility.Utility.CopyStreamAsync(stream, s, true, cancelToken, m_copybuffer);
-
-                using (System.Net.HttpWebResponse resp = (System.Net.HttpWebResponse)areq.GetResponse())
-                {
-                    int code = (int)resp.StatusCode;
-                    if (code < 200 || code >= 300) //For some reason Mono does not throw this automatically
-                        throw new System.Net.WebException(resp.StatusDescription, null, System.Net.WebExceptionStatus.ProtocolError, resp);
-                }
-            }
-            catch (System.Net.WebException wex)
-            {
-                //Convert to better exception
-                if (wex.Response as System.Net.HttpWebResponse != null)
-                    if ((wex.Response as System.Net.HttpWebResponse).StatusCode == System.Net.HttpStatusCode.Conflict || (wex.Response as System.Net.HttpWebResponse).StatusCode == System.Net.HttpStatusCode.NotFound)
-                        throw new Interface.FolderMissingException(Strings.WEBDAV.MissingFolderError(m_path, wex.Message), wex);
-
-                throw;
-            }
-        }
-
-        public void Get(string remotename, System.IO.Stream stream)
-        {
-            var req = CreateRequest(remotename);
-            req.Method = System.Net.WebRequestMethods.Http.Get;
-
-            try
-            {
-                var areq = new Utility.AsyncHttpRequest(req);
-                using (var resp = (System.Net.HttpWebResponse)areq.GetResponse())
-                {
-                    int code = (int)resp.StatusCode;
-                    if (code < 200 || code >= 300) //For some reason Mono does not throw this automatically
-                        throw new System.Net.WebException(resp.StatusDescription, null, System.Net.WebExceptionStatus.ProtocolError, resp);
-
-                    using (var s = areq.GetResponseStream())
-                        Utility.Utility.CopyStream(s, stream, true, m_copybuffer);
-                }
-            }
-            catch (System.Net.WebException wex)
-            {
-                if (wex.Response as System.Net.HttpWebResponse != null)
-                {
-                    if ((wex.Response as System.Net.HttpWebResponse).StatusCode == System.Net.HttpStatusCode.Conflict)
-                        throw new Interface.FolderMissingException(Strings.WEBDAV.MissingFolderError(m_path, wex.Message), wex);
-
-                    if
-                    (
-                        (wex.Response as System.Net.HttpWebResponse).StatusCode == System.Net.HttpStatusCode.NotFound
-                        &&
-                        m_filenamelist != null
-                        &&
-                        m_filenamelist.Contains(remotename)
-                    )
-                        throw new Exception(Strings.WEBDAV.SeenThenNotFoundError(m_path, remotename, System.IO.Path.GetExtension(remotename), wex.Message), wex);
-                }
-
-                throw;
-            }
-        }
-
-        #endregion
     }
 }
