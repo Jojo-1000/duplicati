@@ -19,6 +19,7 @@
 #endregion
 using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using System.Text;
 using Duplicati.Library.Common;
 
@@ -152,7 +153,7 @@ namespace Duplicati.Library.Modules.Builtin
                     password2.Append(k.KeyChar);
 
                     //Unix/Linux user know that there is no feedback, Win user gets scared :)
-                    if (System.Environment.OSVersion.Platform != PlatformID.Unix)
+                    if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
                         Console.Write("*");
                 }
                 Console.WriteLine();

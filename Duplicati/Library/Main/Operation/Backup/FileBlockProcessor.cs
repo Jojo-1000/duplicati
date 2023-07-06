@@ -35,7 +35,7 @@ namespace Duplicati.Library.Main.Operation.Backup
         /// </summary>
         private static readonly string FILELOGTAG = Logging.Log.LogTagFromType(typeof(FileBlockProcessor)) + ".FileEntry";
 
-        public static Task Run(Snapshots.ISnapshotService snapshot, Options options, BackupDatabase database, BackupStatsCollector stats, ITaskReader taskreader, CancellationToken token)
+        public static Task Run(Snapshots.ISnapshotService snapshot, Options options, BackupDatabase database, BackupStatsCollector stats, ITaskReader taskreader, CancellationToken cancelAfterFileToken)
         {
             return AutomationExtensions.RunTask(
             new 
@@ -52,7 +52,7 @@ namespace Duplicati.Library.Main.Operation.Backup
 
                     try
                     {
-                        if (token.IsCancellationRequested)
+                        if (cancelAfterFileToken.IsCancellationRequested)
                         {
                             break;
                         }

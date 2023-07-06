@@ -25,6 +25,8 @@ using AlphaFS = Alphaleonis.Win32.Filesystem;
 using Duplicati.Library.Interface;
 using Newtonsoft.Json;
 
+#pragma warning disable PC001 // API not supported on all platforms
+
 namespace Duplicati.Library.Common.IO
 {
     public struct SystemIOWindows : ISystemIO
@@ -631,3 +633,4 @@ namespace Duplicati.Library.Common.IO
     }
 }
 
+#pragma warning restore PC001 // API not supported on all platforms

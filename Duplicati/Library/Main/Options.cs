@@ -588,7 +588,7 @@ namespace Duplicati.Library.Main
             get
             {
                 if (!m_options.ContainsKey("force-locale"))
-                    return System.Threading.Thread.CurrentThread.CurrentCulture;
+                    return CultureInfo.CurrentCulture;
                 else
                 {
                     var localestring = m_options["force-locale"];

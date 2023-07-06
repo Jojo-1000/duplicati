@@ -176,7 +176,7 @@ namespace Duplicati.Library.Main.Operation
         /// <summary>
         /// Performs the bulk of work by starting all relevant processes
         /// </summary>
-        private static async Task RunMainOperation(IEnumerable<string> sources, Snapshots.ISnapshotService snapshot, UsnJournalService journalService, Backup.BackupDatabase database, Backup.BackupStatsCollector stats, Options options, IFilter sourcefilter, IFilter filter, BackupResults result, Common.ITaskReader taskreader, long filesetid, long lastfilesetid, CancellationToken token)
+        private static async Task RunMainOperation(IEnumerable<string> sources, Snapshots.ISnapshotService snapshot, UsnJournalService journalService, Backup.BackupDatabase database, Backup.BackupStatsCollector stats, Options options, IFilter sourcefilter, IFilter filter, BackupResults result, Common.ITaskReader taskreader, long filesetid, long lastfilesetid, CancellationToken cancelAfterFileToken)
         {
             using (new Logging.Timer(LOGTAG, "BackupMainOperation", "BackupMainOperation"))
             {
@@ -190,14 +190,14 @@ namespace Duplicati.Library.Main.Operation
                         new[]
                             {
                                     Backup.DataBlockProcessor.Run(database, options, taskreader),
-                                    Backup.FileBlockProcessor.Run(snapshot, options, database, stats, taskreader, token),
+                                    Backup.FileBlockProcessor.Run(snapshot, options, database, stats, taskreader, cancelAfterFileToken),
                                     Backup.StreamBlockSplitter.Run(options, database, taskreader),
                                     Backup.FileEnumerationProcess.Run(sources, snapshot, journalService,
                                         options.FileAttributeFilter, sourcefilter, filter, options.SymlinkPolicy,
                                         options.HardlinkPolicy, options.ExcludeEmptyFolders, options.IgnoreFilenames,
-                                        options.ChangedFilelist, taskreader, token),
+                                        options.ChangedFilelist, taskreader, cancelAfterFileToken),
                                     Backup.FilePreFilterProcess.Run(snapshot, options, stats, database),
-                                    Backup.MetadataPreProcess.Run(snapshot, options, database, lastfilesetid, token),
+                                    Backup.MetadataPreProcess.Run(snapshot, options, database, lastfilesetid, cancelAfterFileToken),
                                     Backup.SpillCollectorProcess.Run(options, database, taskreader),
                                     Backup.ProgressHandler.Run(result)
                             }
@@ -236,7 +236,7 @@ namespace Duplicati.Library.Main.Operation
                     });
 
                     // store journal data in database, unless job is being canceled
-                    if (!token.IsCancellationRequested)
+                    if (!cancelAfterFileToken.IsCancellationRequested)
                     {
                         var data = journalService.VolumeDataList.Where(p => p.JournalData != null).Select(p => p.JournalData).ToList();
                         if (data.Any())
@@ -250,7 +250,7 @@ namespace Duplicati.Library.Main.Operation
                     }
                 }
 
-                if (token.IsCancellationRequested)
+                if (cancelAfterFileToken.IsCancellationRequested)
                 {
                     result.PartialBackup = true;
                     Log.WriteWarningMessage(LOGTAG, "CancellationRequested", null, "Cancellation was requested by user.");
@@ -344,9 +344,9 @@ namespace Duplicati.Library.Main.Operation
             }
         }
 
-        public void Run(string[] sources, Library.Utility.IFilter filter, CancellationToken token)
+        public void Run(string[] sources, Library.Utility.IFilter filter, CancellationToken cancelAfterFileToken)
         {
-            RunAsync(sources, filter, token).WaitForTaskOrThrow();
+            RunAsync(sources, filter, cancelAfterFileToken).WaitForTaskOrThrow();
         }
 
         private static Exception BuildException(Exception source, params Task[] tasks)
@@ -393,7 +393,7 @@ namespace Duplicati.Library.Main.Operation
             return await flushReq.LastWriteSizeAsync;
         }
 
-        private async Task RunAsync(string[] sources, Library.Utility.IFilter filter, CancellationToken token)
+        private async Task RunAsync(string[] sources, Library.Utility.IFilter filter, CancellationToken cancelAfterFileToken)
         {
             m_result.OperationProgressUpdater.UpdatePhase(OperationPhase.Backup_Begin);                        
             
@@ -508,7 +508,7 @@ namespace Duplicati.Library.Main.Operation
                                 // Run the backup operation
                                 if (await m_result.TaskReader.ProgressAsync)
                                 {
-                                    await RunMainOperation(sources, snapshot, journalService, db, stats, m_options, m_sourceFilter, m_filter, m_result, m_result.TaskReader, filesetid, lastfilesetid, token).ConfigureAwait(false);
+                                    await RunMainOperation(sources, snapshot, journalService, db, stats, m_options, m_sourceFilter, m_filter, m_result, m_result.TaskReader, filesetid, lastfilesetid, cancelAfterFileToken).ConfigureAwait(false);
                                 }
                             }
                             finally
@@ -519,7 +519,7 @@ namespace Duplicati.Library.Main.Operation
                         }
 
                         // Add the fileset file to the dlist file
-                        filesetvolume.CreateFilesetFile(!token.IsCancellationRequested);
+                        filesetvolume.CreateFilesetFile(!cancelAfterFileToken.IsCancellationRequested);
 
                         // Ensure the database is in a sane state after adding data
                         using (new Logging.Timer(LOGTAG, "VerifyConsistency", "VerifyConsistency"))

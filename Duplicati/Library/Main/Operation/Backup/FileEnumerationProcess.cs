@@ -42,7 +42,7 @@ namespace Duplicati.Library.Main.Operation.Backup
         /// </summary>
         private static readonly string FILTER_LOGTAG = Logging.Log.LogTagFromType(typeof(FileEnumerationProcess));
 
-        public static Task Run(IEnumerable<string> sources, Snapshots.ISnapshotService snapshot, UsnJournalService journalService, FileAttributes fileAttributes, Duplicati.Library.Utility.IFilter sourcefilter, Duplicati.Library.Utility.IFilter emitfilter, Options.SymlinkStrategy symlinkPolicy, Options.HardlinkStrategy hardlinkPolicy, bool excludeemptyfolders, string[] ignorenames, string[] changedfilelist, ITaskReader taskreader, CancellationToken token)
+        public static Task Run(IEnumerable<string> sources, Snapshots.ISnapshotService snapshot, UsnJournalService journalService, FileAttributes fileAttributes, Duplicati.Library.Utility.IFilter sourcefilter, Duplicati.Library.Utility.IFilter emitfilter, Options.SymlinkStrategy symlinkPolicy, Options.HardlinkStrategy hardlinkPolicy, bool excludeemptyfolders, string[] ignorenames, string[] changedfilelist, ITaskReader taskreader, CancellationToken cancelAfterFileToken)
         {
             return AutomationExtensions.RunTask(
             new
@@ -52,7 +52,7 @@ namespace Duplicati.Library.Main.Operation.Backup
 
             async self =>
             {
-                if (!token.IsCancellationRequested)
+                if (!cancelAfterFileToken.IsCancellationRequested)
                 {
                     var hardlinkmap = new Dictionary<string, string>();
                     var mixinqueue = new Queue<string>();
@@ -83,7 +83,7 @@ namespace Duplicati.Library.Main.Operation.Backup
                             {
                             }
 
-                            if (token.IsCancellationRequested)
+                            if (cancelAfterFileToken.IsCancellationRequested)
                             {
                                 return false;
                             }
@@ -108,7 +108,7 @@ namespace Duplicati.Library.Main.Operation.Backup
                         });
                     }
 
-                    if (token.IsCancellationRequested)
+                    if (cancelAfterFileToken.IsCancellationRequested)
                     {
                         return;
                     }
@@ -120,7 +120,7 @@ namespace Duplicati.Library.Main.Operation.Backup
                     // Process each path, and dequeue the mixins with symlinks as we go
                     foreach (var s in source)
                     {
-                        if (token.IsCancellationRequested)
+                        if (cancelAfterFileToken.IsCancellationRequested)
                         {
                             break;
                         }

@@ -60,7 +60,7 @@ namespace Duplicati.Library.Main.Operation.Backup
             public bool MetadataChanged;
         }
             
-        public static Task Run(Snapshots.ISnapshotService snapshot, Options options, BackupDatabase database, long lastfilesetid, CancellationToken token)
+        public static Task Run(Snapshots.ISnapshotService snapshot, Options options, BackupDatabase database, long lastfilesetid, CancellationToken cancelAfterFileToken)
         {
             return AutomationExtensions.RunTask(new
             {
@@ -154,7 +154,7 @@ namespace Duplicati.Library.Main.Operation.Backup
                         }
                         catch (Exception ex)
                         {
-                            if (ex.IsRetiredException() || token.IsCancellationRequested)
+                            if (ex.IsRetiredException() || cancelAfterFileToken.IsCancellationRequested)
                             {
                                 continue;
                             }

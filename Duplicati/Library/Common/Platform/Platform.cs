@@ -1,5 +1,4 @@
-﻿using System.Runtime.InteropServices;
-//  Copyright (C) 2018, The Duplicati Team
+﻿//  Copyright (C) 2018, The Duplicati Team
 //  http://www.duplicati.com, info@duplicati.com
 //
 //  This library is free software; you can redistribute it and/or modify

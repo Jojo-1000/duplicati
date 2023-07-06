@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Management;
+using System.Runtime.InteropServices;
 using Duplicati.Library.Common;
 using Duplicati.Library.Common.IO;
 
