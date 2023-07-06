@@ -239,26 +239,33 @@ namespace Duplicati.Library.Backend.File
 #endif
 
         public async Task GetAsync(string remotename, System.IO.Stream stream, CancellationToken cancelToken)
-        {            
-            if (SupportsStreaming)
+        {
+            try
             {
-                // FileOpenRead has flags System.IO.FileMode.Open, System.IO.FileAccess.Read, System.IO.FileShare.Read
-                using (var readstream = systemIO.FileOpenRead(GetRemoteName(remotename)))
-                    await Utility.Utility.CopyStreamAsync(readstream, stream, true, cancelToken, m_copybuffer);
-            }
-            else
-            {
-                var filename = (stream as FauxStream).Filename;
-                var path = GetRemoteName(remotename);
-                if (m_moveFile)
+                if (SupportsStreaming)
                 {
-                    if (systemIO.FileExists(filename))
-                        systemIO.FileDelete(filename);
-                    
-                    systemIO.FileMove(path, filename);
+                    // FileOpenRead has flags System.IO.FileMode.Open, System.IO.FileAccess.Read, System.IO.FileShare.Read
+                    using (var readstream = systemIO.FileOpenRead(GetRemoteName(remotename)))
+                        await Utility.Utility.CopyStreamAsync(readstream, stream, true, cancelToken, m_copybuffer);
                 }
                 else
-                    systemIO.FileCopy(path, filename, true);
+                {
+                    var filename = (stream as FauxStream).Filename;
+                    var path = GetRemoteName(remotename);
+                    if (m_moveFile)
+                    {
+                        if (systemIO.FileExists(filename))
+                            systemIO.FileDelete(filename);
+
+                        systemIO.FileMove(path, filename);
+                    }
+                    else
+                        systemIO.FileCopy(path, filename, true);
+                }
+            }
+            catch(FileNotFoundException ex)
+            {
+                throw new FileMissingException(ex);
             }
         }
 

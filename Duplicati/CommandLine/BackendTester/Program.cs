@@ -180,7 +180,7 @@ namespace Duplicati.CommandLine.BackendTester
                 IEnumerable<Library.Interface.IFileEntry> curlist = null;
                 try
                 {
-                    backend.TestAsync(token).Wait();
+                    backend.TestAsync(token).Await();
                     curlist = backend.ListAsync(token).Await();
                 }
                 catch (FolderMissingException)
@@ -189,8 +189,8 @@ namespace Duplicati.CommandLine.BackendTester
                     {
                         try
                         {
-                            backend.CreateFolderAsync(token).Wait();
-                            curlist = backend.ListAsync(token).Result;
+                            backend.CreateFolderAsync(token).Await();
+                            curlist = backend.ListAsync(token).Await();
                         }
                         catch (Exception ex)
                         {
@@ -209,7 +209,7 @@ namespace Duplicati.CommandLine.BackendTester
                             if (Library.Utility.Utility.ParseBoolOption(options, "force"))
                             {
                                 Console.WriteLine("Auto clean, removing file: {0}", fe.Name);
-                                backend.DeleteAsync(fe.Name, token).Wait();
+                                backend.DeleteAsync(fe.Name, token).Await();
                                 continue;
                             }
                             else
@@ -317,13 +317,13 @@ namespace Duplicati.CommandLine.BackendTester
 
                         Console.WriteLine("Renaming file {0} from {1} to {2}", renameIndex, originalRenamedFile.remotefilename, renamedFileNewName);
 
-                        renameEnabledBackend.RenameAsync(originalRenamedFile.remotefilename, renamedFileNewName, token).Wait();
+                        renameEnabledBackend.RenameAsync(originalRenamedFile.remotefilename, renamedFileNewName, token).Await();
                         files[renameIndex] = new TempFile(renamedFileNewName, originalRenamedFile.localfilename, originalRenamedFile.hash, originalRenamedFile.length);
                     }
 
                     Console.WriteLine("Verifying file list ...");
 
-                    curlist = backend.ListAsync(token).Result;
+                    curlist = backend.ListAsync(token).Await();
                     foreach (Library.Interface.IFileEntry fe in curlist)
                         if (!fe.IsFolder)
                         {
@@ -373,12 +373,12 @@ namespace Duplicati.CommandLine.BackendTester
                                     using (System.IO.FileStream fs = new System.IO.FileStream(cf, System.IO.FileMode.Create, System.IO.FileAccess.Write, System.IO.FileShare.None))
                                     using (Library.Utility.ThrottledStream ts = new Library.Utility.ThrottledStream(fs, throttleDownload, throttleDownload))
                                     using (NonSeekableStream nss = new NonSeekableStream(ts))
-                                        backend.GetAsync(files[i].remotefilename, nss, token).Wait();
+                                        backend.GetAsync(files[i].remotefilename, nss, token).Await();
                                 }
                                 else
                                 {
                                     using (var fs = new FauxStream(cf, System.IO.FileMode.Create, System.IO.FileAccess.Write, System.IO.FileShare.None))
-                                        backend.GetAsync(files[i].remotefilename, fs, token).Wait();
+                                        backend.GetAsync(files[i].remotefilename, fs, token).Await();
                                 }
 
                                 e = null;
@@ -411,7 +411,7 @@ namespace Duplicati.CommandLine.BackendTester
                     Console.WriteLine("Deleting files...");
 
                     foreach (TempFile tx in files)
-                        try { backend.DeleteAsync(tx.remotefilename, token).Wait(); }
+                        try { backend.DeleteAsync(tx.remotefilename, token).Await(); }
                         catch (Exception ex)
                         {
                             Console.WriteLine("*** Failed to delete file {0}, message: {1}", tx.remotefilename, ex);
@@ -527,12 +527,12 @@ namespace Duplicati.CommandLine.BackendTester
                     using (System.IO.FileStream fs = new System.IO.FileStream(localfilename, System.IO.FileMode.Open, System.IO.FileAccess.Read, System.IO.FileShare.Read))
                     using (Library.Utility.ThrottledStream ts = new Library.Utility.ThrottledStream(fs, throttle, throttle))
                     using (NonSeekableStream nss = new NonSeekableStream(ts))
-                        backend.PutAsync(remotefilename, nss, CancellationToken.None).Wait();
+                        backend.PutAsync(remotefilename, nss, CancellationToken.None).Await();
                 }
                 else
                 {
                     using (var fs = new FauxStream(localfilename, System.IO.FileMode.Open, System.IO.FileAccess.Read, System.IO.FileShare.Read))
-                        backend.PutAsync(remotefilename, fs, CancellationToken.None).Wait();
+                        backend.PutAsync(remotefilename, fs, CancellationToken.None).Await();
                 }
 
                 e = null;
