@@ -13,6 +13,7 @@ using System.Net;
 using System.Threading.Tasks;
 using System.IO;
 using Duplicati.Library.Common.IO;
+using Duplicati.Library.Interface;
 
 namespace Duplicati.Library.Main
 {
@@ -361,7 +362,8 @@ namespace Duplicati.Library.Main
         private System.Threading.Thread m_thread;
         private readonly BasicResults m_taskControl;
         private readonly DatabaseCollector m_db;
-        private readonly CancellationToken m_token;
+        // Cancels all async backend operations immediately
+        private CancellationTokenSource m_cancelBackendOperations;
 
         // Cache these
         private readonly int m_numberofretries;
@@ -380,7 +382,7 @@ namespace Duplicati.Library.Main
             m_retrydelay = options.RetryDelay;
             m_retrywithexponentialbackoff = options.RetryWithExponentialBackoff;
             // TODO: Pass cancellation token
-            m_token = CancellationToken.None;
+            m_cancelBackendOperations = new CancellationTokenSource();
 
             m_db = new DatabaseCollector(database);
 
@@ -518,14 +520,22 @@ namespace Duplicati.Library.Main
                             Logging.Log.WriteRetryMessage(LOGTAG, $"Retry{item.Operation}", ex, "Operation {0} with file {1} attempt {2} of {3} failed with message: {4}", item.Operation, item.RemoteFilename, retries, m_numberofretries, ex.Message);
 
                             // If the thread is aborted, we exit here
-                            if (ex is System.Threading.ThreadAbortException)
+                            if (ex is System.Threading.ThreadAbortException 
+                                || ex is OperationCanceledException
+                                || ex is CancelException)
                             {
                                 m_queue.SetCompleted();
                                 item.Exception = ex;
                                 item.SignalComplete();
+
+                                if (!m_cancelBackendOperations.IsCancellationRequested)
+                                {
+                                    m_cancelBackendOperations.Cancel();
+                                }
                                 throw;
                             }
 
+                            // TODO-DNC: Find out how to detect and fix name resolution failures with new HttpClient
                             if (ex is WebException exception)
                             {
                                 // Refresh DNS name if we fail to connect in order to prevent issues with incorrect DNS entries
@@ -552,7 +562,7 @@ namespace Duplicati.Library.Main
                                 try
                                 {
                                     // If we successfully create the folder, we can re-use the connection
-                                    m_backend.CreateFolderAsync(m_token).Wait();
+                                    m_backend.CreateFolderAsync(m_cancelBackendOperations.Token).Wait();
                                     recovered = true;
                                 }
                                 catch (Exception dex)
@@ -596,7 +606,7 @@ namespace Duplicati.Library.Main
                         Logging.Log.WriteInformationMessage(LOGTAG, "DeleteFileFailed", LC.L("Failed to delete file {0}, testing if file exists", item.RemoteFilename));
                         try
                         {
-                            if (!m_backend.ListAsync(m_token).Await().Select(x => x.Name).Contains(item.RemoteFilename))
+                            if (!m_backend.ListAsync(m_cancelBackendOperations.Token).Await().Select(x => x.Name).Contains(item.RemoteFilename))
                             {
                                 lastException = null;
                                 Logging.Log.WriteInformationMessage(LOGTAG, "DeleteFileFailureRecovered", LC.L("Recovered from problem with attempting to delete non-existing file {0}", item.RemoteFilename));
@@ -632,6 +642,11 @@ namespace Duplicati.Library.Main
             FileEntryItem i;
             while ((i = m_queue.Dequeue()) != null)
                 i.SignalComplete();
+
+            if (!m_cancelBackendOperations.IsCancellationRequested)
+            {
+                m_cancelBackendOperations.Cancel();
+            }
         }
 
         private void RenameFileAfterError(FileEntryItem item)
@@ -736,12 +751,12 @@ namespace Duplicati.Library.Main
                 using (var fs = System.IO.File.OpenRead(item.LocalFilename))
                 using (var ts = new ThrottledStream(fs, m_options.MaxUploadPrSecond, 0))
                 using (var pgs = new Library.Utility.ProgressReportingStream(ts, pg => HandleProgress(ts, pg)))
-                    m_backend.PutAsync(item.RemoteFilename, pgs, m_token).Wait();
+                    m_backend.PutAsync(item.RemoteFilename, pgs, m_cancelBackendOperations.Token).Wait();
             }
             else
             {
                 using (var fs = new FauxStream(item.LocalFilename, FileMode.Open, FileAccess.Read, FileShare.Read))
-                    m_backend.PutAsync(item.RemoteFilename, fs, m_token).Wait();
+                    m_backend.PutAsync(item.RemoteFilename, fs, m_cancelBackendOperations.Token).Wait();
             }
 
             var duration = DateTime.Now - begin;
@@ -754,7 +769,7 @@ namespace Duplicati.Library.Main
 
             if (m_options.ListVerifyUploads)
             {
-                var f = m_backend.ListAsync(m_token).Await().FirstOrDefault(n => n.Name.Equals(item.RemoteFilename, StringComparison.OrdinalIgnoreCase));
+                var f = m_backend.ListAsync(m_cancelBackendOperations.Token).Await().FirstOrDefault(n => n.Name.Equals(item.RemoteFilename, StringComparison.OrdinalIgnoreCase));
                 if (f == null)
                     throw new Exception(string.Format("List verify failed, file was not found after upload: {0}", item.RemoteFilename));
                 else if (f.Size != item.Size && f.Size >= 0)
@@ -836,7 +851,7 @@ namespace Duplicati.Library.Main
                             {
                                 taskHasher.Start(); // We do not start tasks earlier to be sure the input always gets closed. 
                                 if (taskDecrypter != null) taskDecrypter.Start();
-                                    m_backend.GetAsync(item.RemoteFilename, pgs, m_token).Wait();
+                                    m_backend.GetAsync(item.RemoteFilename, pgs, m_cancelBackendOperations.Token).Wait();
                             }
                             retDownloadSize = ss.TotalBytesWritten;
                         }
@@ -844,7 +859,7 @@ namespace Duplicati.Library.Main
                     else
                     {
                         using (dlToStream = System.IO.File.OpenRead(dlTarget))
-                            m_backend.GetAsync(item.RemoteFilename, dlToStream, m_token).Wait();
+                            m_backend.GetAsync(item.RemoteFilename, dlToStream, m_cancelBackendOperations.Token).Wait();
                         retDownloadSize = new System.IO.FileInfo(dlTarget).Length;
                         using (dlToStream = System.IO.File.OpenRead(dlTarget))
                         {
@@ -920,7 +935,7 @@ namespace Duplicati.Library.Main
                     {
                         using (var ts = new ThrottledStream(ss, 0, m_options.MaxDownloadPrSecond))
                         using (var pgs = new Library.Utility.ProgressReportingStream(ts, pg => HandleProgress(ts, pg)))
-                        { m_backend.GetAsync(item.RemoteFilename, pgs, m_token).Wait(); }
+                        { m_backend.GetAsync(item.RemoteFilename, pgs, m_cancelBackendOperations.Token).Wait(); }
                         ss.Flush();
                         retDownloadSize = ss.TotalBytesWritten;
                         retHashcode = getFileHash();
@@ -929,7 +944,7 @@ namespace Duplicati.Library.Main
                 else
                 {
                     using (var fs = new FauxStream(dlTarget, FileMode.OpenOrCreate, FileAccess.Write, FileShare.None))
-                        m_backend.GetAsync(item.RemoteFilename, fs, m_token).Wait();
+                        m_backend.GetAsync(item.RemoteFilename, fs, m_cancelBackendOperations.Token).Wait();
                     retDownloadSize = new System.IO.FileInfo(dlTarget).Length;
                     retHashcode = CalculateFileHash(dlTarget);
                 }
@@ -1074,7 +1089,7 @@ namespace Duplicati.Library.Main
         {
             m_statwriter.SendEvent(BackendActionType.List, BackendEventType.Started, null, -1);
 
-            var r = m_backend.ListAsync(m_token).Await().ToList();
+            var r = m_backend.ListAsync(m_cancelBackendOperations.Token).Await().ToList();
 
             StringBuilder sb = new StringBuilder();
             sb.AppendLine("[");
@@ -1102,7 +1117,7 @@ namespace Duplicati.Library.Main
             string result = null;
             try
             {
-                m_backend.DeleteAsync(item.RemoteFilename, m_token).Wait();
+                m_backend.DeleteAsync(item.RemoteFilename, m_cancelBackendOperations.Token).Wait();
             }
             catch (Exception ex)
             {
@@ -1116,7 +1131,7 @@ namespace Duplicati.Library.Main
 
                     try
                     {
-                        success = !m_backend.ListAsync(m_token).Await().Select(x => x.Name).Contains(item.RemoteFilename);
+                        success = !m_backend.ListAsync(m_cancelBackendOperations.Token).Await().Select(x => x.Name).Contains(item.RemoteFilename);
                     }
                     catch
                     {
@@ -1152,7 +1167,7 @@ namespace Duplicati.Library.Main
             string result = null;
             try
             {
-                m_backend.CreateFolderAsync(m_token).Wait();
+                m_backend.CreateFolderAsync(m_cancelBackendOperations.Token).Wait();
             }
             catch (Exception ex)
             {
@@ -1475,6 +1490,13 @@ namespace Duplicati.Library.Main
                 }
 
                 m_thread = null;
+            }
+
+            if(m_cancelBackendOperations != null)
+            {
+                // This cancels all ongoing async operations
+                m_cancelBackendOperations.Dispose();
+                m_cancelBackendOperations = null;
             }
 
             //TODO: We cannot null this, because it will be recreated
