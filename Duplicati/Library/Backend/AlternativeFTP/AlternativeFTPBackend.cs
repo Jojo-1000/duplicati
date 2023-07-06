@@ -389,16 +389,27 @@ namespace Duplicati.Library.Backend.AlternativeFTP
                 remotePath += remotename;
             }
 
-            using (var inputStream = await ftpClient.OpenReadAsync(remotePath, cancelToken))
+            try
             {
-                try
+                using (var inputStream = await ftpClient.OpenReadAsync(remotePath, cancelToken))
                 {
-                    await CoreUtility.CopyStreamAsync(inputStream, output, false, cancelToken, _copybuffer);
+                    try
+                    {
+                        await CoreUtility.CopyStreamAsync(inputStream, output, false, cancelToken, _copybuffer);
+                    }
+                    finally
+                    {
+                        inputStream.Close();
+                    }
                 }
-                finally
+            }
+            catch(FtpCommandException ex)
+            {
+                if(ex.CompletionCode == "550")
                 {
-                    inputStream.Close();
+                    throw new FileMissingException(ex);
                 }
+                throw;
             }
 
         }

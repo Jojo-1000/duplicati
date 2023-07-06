@@ -432,7 +432,7 @@ namespace Duplicati.CommandLine.BackendTester
                         using (Duplicati.Library.Utility.TempFile tempFile = new Duplicati.Library.Utility.TempFile())
                         using(var fs = System.IO.File.OpenRead(tempFile.Name))
                         {
-                            backend.GetAsync(string.Format("NonExistentFile-{0}", Guid.NewGuid()), fs, token).Wait();
+                            backend.GetAsync(string.Format("NonExistentFile-{0}", Guid.NewGuid()), fs, token).Await();
                         }
                     }
                     catch (FileMissingException)

@@ -22,6 +22,7 @@ using Duplicati.Library.Interface;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -310,9 +311,22 @@ namespace Duplicati.Library.Backend.FTP
             req.Method = System.Net.WebRequestMethods.Ftp.DownloadFile;
             req.UseBinary = true;
 
-            using (var resp = await req.GetResponseAsync())
-            using (var rs = resp.GetResponseStream())
-                await Utility.Utility.CopyStreamAsync(rs, output, false, cancelToken, m_copybuffer);
+            try
+            {
+                using (var resp = await req.GetResponseAsync())
+                using (var rs = resp.GetResponseStream())
+                    await Utility.Utility.CopyStreamAsync(rs, output, false, cancelToken, m_copybuffer);
+            }
+            catch (WebException ex)
+            {
+                if(ex.Response is FtpWebResponse ftpResponse
+                    && ftpResponse.StatusCode == FtpStatusCode.ActionNotTakenFileUnavailable)
+                {
+                    // Wrap in more fitting exception type
+                    throw new FileMissingException(ex);
+                }
+                throw;
+            }
         }
 
         public async Task DeleteAsync(string remotename, CancellationToken cancelToken)
