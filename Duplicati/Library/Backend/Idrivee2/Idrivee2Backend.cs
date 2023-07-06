@@ -149,7 +149,14 @@ namespace Duplicati.Library.Backend
             get
             {
 
-                var defaults = new Amazon.S3.AmazonS3Config();
+                var defaults = new Amazon.S3.AmazonS3Config()
+                {
+                    // If this is not set, accessing the property will trigger an expensive operation (~30 seconds)
+                    // to get the region endpoint.  The use of ARNs (Amazon Resource Names) doesn't appear to be
+                    // critical for our usages.
+                    // See: https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html
+                    UseArnRegion = false
+                };
 
                 var exts =
                     typeof(Amazon.S3.AmazonS3Config).GetProperties().Where(x => x.CanRead && x.CanWrite && (x.PropertyType == typeof(string) || x.PropertyType == typeof(bool) || x.PropertyType == typeof(int) || x.PropertyType == typeof(long) || x.PropertyType.IsEnum))
