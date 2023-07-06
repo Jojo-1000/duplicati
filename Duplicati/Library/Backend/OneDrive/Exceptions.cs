@@ -171,7 +171,7 @@ namespace Duplicati.Library.Backend.MicrosoftGraph
     public class DriveItemNotFoundException : MicrosoftGraphException
     {
         public DriveItemNotFoundException(HttpResponseMessage response)
-            : base(string.Format("Item at {0} was not found", response?.RequestMessage?.RequestUri?.ToString() ?? "<unknown>"), response)
+            :  base(string.Format("Item at {0} was not found", response?.RequestMessage?.RequestUri?.ToString() ?? "<unknown>"), response)
         {
         }
 

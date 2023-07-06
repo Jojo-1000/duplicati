@@ -363,12 +363,12 @@ namespace Duplicati.Library.Backend
             }
         }
 
-        public Task TestAsync(CancellationToken cancelToken)
+        public async Task TestAsync(CancellationToken cancelToken)
         {
             try
             {
                 string rootPath = string.Format("{0}/root:{1}", DrivePrefix, RootPath);
-                return GetAsync<DriveItem>(rootPath, cancelToken);
+                await GetAsync<DriveItem>(rootPath, cancelToken);
             }
             catch (DriveItemNotFoundException ex)
             {
@@ -423,11 +423,11 @@ namespace Duplicati.Library.Backend
             }
         }
 
-        public Task RenameAsync(string oldname, string newname, CancellationToken cancelToken)
+        public async Task RenameAsync(string oldname, string newname, CancellationToken cancelToken)
         {
             try
             {
-                return PatchAsync(string.Format("{0}/root:{1}{2}", DrivePrefix, RootPath, NormalizeSlashes(oldname)),
+                await PatchAsync(string.Format("{0}/root:{1}{2}", DrivePrefix, RootPath, NormalizeSlashes(oldname)),
                     new DriveItem() { Name = newname },
                     cancelToken);
             }
