@@ -48,7 +48,8 @@ namespace Duplicati.Library.Backend.AlternativeFTP
 
         private const FtpDataConnectionType DEFAULT_DATA_CONNECTION_TYPE = FtpDataConnectionType.AutoPassive;
         private const FtpEncryptionMode DEFAULT_ENCRYPTION_MODE = FtpEncryptionMode.None;
-        private const SslProtocols DEFAULT_SSL_PROTOCOLS = SslProtocols.Default;
+        // None: Auto-choose SSL protocols
+        private const SslProtocols DEFAULT_SSL_PROTOCOLS = SslProtocols.None;
         private const string CONFIG_KEY_AFTP_ENCRYPTION_MODE = "aftp-encryption-mode";
         private const string CONFIG_KEY_AFTP_DATA_CONNECTION_TYPE = "aftp-data-connection-type";
         private const string CONFIG_KEY_AFTP_SSL_PROTOCOLS = "aftp-ssl-protocols";
@@ -256,9 +257,7 @@ namespace Duplicati.Library.Backend.AlternativeFTP
                     SecuritySuite = FluentFTP.GnuTLS.Enums.GnuSuite.Normal,
                     SetALPNControlConnection = string.Empty,
                     SetALPNDataConnection = string.Empty,
-                    SecurityOptions = securityOptions,
-                    // TODO: Remove when FluentFTP.GnuTLS implements thread-safe deinit
-                    DeInitGnuTls = false
+                    SecurityOptions = securityOptions
                 };
             };
             return config;
