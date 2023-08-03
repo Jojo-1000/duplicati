@@ -40,8 +40,8 @@
     <Reference Include="FluentFTP, Version=46.0.2.0, Culture=neutral, PublicKeyToken=f4af092b1d8df44f, processorArchitecture=MSIL">
       <HintPath>..\..\..\..\packages\FluentFTP.46.0.2\lib\net462\FluentFTP.dll</HintPath>
     </Reference>
-    <Reference Include="FluentFTP.GnuTLS, Version=1.0.21.0, Culture=neutral, PublicKeyToken=f4af092b1d8df44f, processorArchitecture=MSIL">
-      <HintPath>..\..\..\..\packages\FluentFTP.GnuTLS.1.0.21\lib\net462\FluentFTP.GnuTLS.dll</HintPath>
+    <Reference Include="FluentFTP.GnuTLS, Version=1.0.22.0, Culture=neutral, PublicKeyToken=f4af092b1d8df44f, processorArchitecture=MSIL">
+      <HintPath>..\..\..\..\packages\FluentFTP.GnuTLS.1.0.22\lib\net462\FluentFTP.GnuTLS.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.Extensions.Logging.Abstractions, Version=2.1.0.0, Culture=neutral, PublicKeyToken=adb9793829ddae60, processorArchitecture=MSIL">
       <HintPath>..\..\..\..\packages\Microsoft.Extensions.Logging.Abstractions.2.1.0\lib\netstandard2.0\Microsoft.Extensions.Logging.Abstractions.dll</HintPath>
@@ -109,12 +109,12 @@
     </Content>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
-  <Import Project="..\..\..\..\packages\FluentFTP.GnuTLS.1.0.21\build\FluentFTP.GnuTLS.targets" Condition="Exists('..\..\..\..\packages\FluentFTP.GnuTLS.1.0.21\build\FluentFTP.GnuTLS.targets')" />
+  <Import Project="..\..\..\..\packages\FluentFTP.GnuTLS.1.0.22\build\FluentFTP.GnuTLS.targets" Condition="Exists('..\..\..\..\packages\FluentFTP.GnuTLS.1.0.22\build\FluentFTP.GnuTLS.targets')" />
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
     <PropertyGroup>
       <ErrorText>This project references NuGet package(s) that are missing on this computer. Use NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
     </PropertyGroup>
-    <Error Condition="!Exists('..\..\..\..\packages\FluentFTP.GnuTLS.1.0.21\build\FluentFTP.GnuTLS.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\..\..\..\packages\FluentFTP.GnuTLS.1.0.21\build\FluentFTP.GnuTLS.targets'))" />
+    <Error Condition="!Exists('..\..\..\..\packages\FluentFTP.GnuTLS.1.0.22\build\FluentFTP.GnuTLS.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\..\..\..\packages\FluentFTP.GnuTLS.1.0.22\build\FluentFTP.GnuTLS.targets'))" />
   </Target>
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.
