@@ -74,7 +74,7 @@ namespace Duplicati.CommandLine.RecoveryTool
                 filelist = List.SelectListFile(args[2], folder);
             }
 
-            Library.Main.Volumes.VolumeReaderBase.UpdateOptionsFromManifest(Path.GetExtension(filelist).Trim('.'), filelist, new Duplicati.Library.Main.Options(options));
+            Library.Main.Volumes.VolumeReaderBase.UpdateOptionsFromManifest(Path.GetExtension(filelist).Trim('.'), File.OpenRead(filelist), new Duplicati.Library.Main.Options(options));
 
             string blocksize_str;
             options.TryGetValue("blocksize", out blocksize_str);

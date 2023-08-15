@@ -126,7 +126,7 @@ namespace Duplicati.Library.Main.Operation
                     return;
 
                 using (var tmpfile = backend.Get(firstEntry.File.Name, firstEntry.File.Size, null))
-                using (var rd = new Volumes.FilesetVolumeReader(RestoreHandler.GetCompressionModule(firstEntry.File.Name), tmpfile, m_options))
+                using (var rd = new Volumes.FilesetVolumeReader(RestoreHandler.GetCompressionModule(firstEntry.File.Name), tmpfile.OpenRead(), m_options))
                     if (simpleList)
                     {
                         m_result.SetResult(
@@ -159,7 +159,7 @@ namespace Duplicati.Library.Main.Operation
                 long flindex = 1;
                 foreach (var flentry in filteredList)
                     using (var tmpfile = backend.Get(flentry.Value.File.Name, flentry.Value.File == null ? -1 : flentry.Value.File.Size, null))
-                    using (var rd = new Volumes.FilesetVolumeReader(flentry.Value.CompressionModule, tmpfile, m_options))
+                    using (var rd = new Volumes.FilesetVolumeReader(flentry.Value.CompressionModule, tmpfile.OpenRead(), m_options))
                     {
                         if (m_result.TaskControlRendevouz() == TaskControlState.Stop)
                             return;
@@ -218,7 +218,7 @@ namespace Duplicati.Library.Main.Operation
                     // here is the most direct way to obtain the partial/full status without a major
                     // refactoring.  Since restoring directly from the backend files should be a relatively
                     // rare event, we can work on improving the performance later.
-                    VolumeBase.FilesetData filesetData = VolumeReaderBase.GetFilesetData(entry.Value.CompressionModule, file.TempFile, options);
+                    VolumeBase.FilesetData filesetData = VolumeReaderBase.GetFilesetData(entry.Value.CompressionModule, file.TempFile.OpenRead(), options);
                     list.Add(new ListResultFileset(entry.Key, filesetData.IsFullBackup ? BackupType.FULL_BACKUP : BackupType.PARTIAL_BACKUP, entry.Value.Time.ToLocalTime(), -1, -1));
                 }
             }

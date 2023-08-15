@@ -53,7 +53,7 @@ namespace Duplicati.CommandLine.RecoveryTool
 
                 var p = Library.Main.Volumes.VolumeBase.ParseFilename(Path.GetFileName(file));
 
-                Library.Main.Volumes.VolumeReaderBase.UpdateOptionsFromManifest(p.CompressionModule, file, new Duplicati.Library.Main.Options(options));
+                Library.Main.Volumes.VolumeReaderBase.UpdateOptionsFromManifest(p.CompressionModule, File.OpenRead(file), new Duplicati.Library.Main.Options(options));
 
                 foreach (var f in EnumerateFilesInDList(file, filter, options))
                     Console.WriteLine("{0} ({1})", f.Path, Library.Utility.Utility.FormatSizeString(f.Size));

@@ -14,7 +14,7 @@ namespace Duplicati.Library.Main.Volumes
         protected readonly bool m_disposeCompression = false;
         protected ICompression m_compression;
         protected Stream m_stream;
-        
+
         private static ICompression LoadCompressor(string compressor, Stream stream, Options options)
         {
             var tmp = DynamicLoader.CompressionLoader.GetModule(compressor, stream, Interface.ArchiveMode.Read, options.RawOptions);
@@ -36,15 +36,16 @@ namespace Duplicati.Library.Main.Volumes
             return LoadCompressor(compressor, stream, options);
         }
 
-        protected VolumeReaderBase(string compressor, string file, Options options)
+        protected VolumeReaderBase(string compressor, [AssumesOwnership] Stream inputStream, Options options)
             : base(options)
         {
-            m_compression = LoadCompressor(compressor, file, options, out m_stream);
+            m_stream = inputStream;
+            m_compression = LoadCompressor(compressor, inputStream, options);
 
             ReadFileset();
 
             ReadManifests(options);
-            
+
             m_disposeCompression = true;
         }
 
@@ -92,10 +93,10 @@ namespace Duplicati.Library.Main.Volumes
             }
         }
 
-        public static FilesetData GetFilesetData(string compressor, string file, Options options)
+        public static FilesetData GetFilesetData(string compressor, [AssumesOwnership]Stream inputStream, Options options)
         {
-            using (var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read))
-            using (var c = LoadCompressor(compressor, stream, options))
+            using (inputStream)
+            using (var c = LoadCompressor(compressor, inputStream, options))
             using (var s = c.OpenRead(FILESET_FILENAME))
             {
                 if (s == null)
@@ -110,10 +111,10 @@ namespace Duplicati.Library.Main.Volumes
             }
         }
 
-        public static void UpdateOptionsFromManifest(string compressor, string file, Options options)
+        public static void UpdateOptionsFromManifest(string compressor, [AssumesOwnership] Stream inputStream, Options options)
         {
-            using (var stream = new System.IO.FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read))
-            using (var c = LoadCompressor(compressor, stream, options))
+            using (inputStream)
+            using (var c = LoadCompressor(compressor, inputStream, options))
             using (var s = c.OpenRead(MANIFEST_FILENAME))
             using (var fs = new StreamReader(s, ENCODING))
             {
@@ -150,13 +151,13 @@ namespace Duplicati.Library.Main.Volumes
             using (var fs = compression.OpenRead(filename))
             {
                 int s;
-				var read = 0L;
+                var read = 0L;
                 while ((s = Library.Utility.Utility.ForceStreamRead(fs, buffer, buffer.Length)) != 0)
                 {
                     if (s != buffer.Length)
-						throw new InvalidDataException($"Premature End-of-stream encountered while reading blocklist hashes for {filename}. Got {s} bytes of {buffer.Length} at offset {read * buffer.Length}");
+                        throw new InvalidDataException($"Premature End-of-stream encountered while reading blocklist hashes for {filename}. Got {s} bytes of {buffer.Length} at offset {read * buffer.Length}");
 
-					read++;
+                    read++;
                     yield return Convert.ToBase64String(buffer);
                 }
             }

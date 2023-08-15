@@ -86,7 +86,7 @@ namespace Duplicati.Library.Main.Operation.Backup
 
                     var buffer = new byte[options.Blocksize];
 
-                    using (var rd = new BlockVolumeReader(options.CompressionModule, source.BlockVolume.LocalFilename, options))
+                    using (var rd = new BlockVolumeReader(options.CompressionModule, System.IO.File.OpenRead(source.BlockVolume.LocalFilename), options))
                     {
                         foreach (var file in rd.Blocks)
                         {

@@ -208,7 +208,7 @@ namespace Duplicati.Library.Main.Operation
         /// <param name="vol">The remote volume being examined</param>
         /// <param name="tf">The path to the downloaded copy of the file</param>
         /// <param name="sample_percent">A value between 0 and 1 that indicates how many blocks are tested in a dblock file</param>
-        public static KeyValuePair<string, IEnumerable<KeyValuePair<TestEntryStatus, string>>> TestVolumeInternals(LocalTestDatabase db, IRemoteVolume vol, string tf, Options options, double sample_percent)
+        public static KeyValuePair<string, IEnumerable<KeyValuePair<TestEntryStatus, string>>> TestVolumeInternals(LocalTestDatabase db, IRemoteVolume vol, Library.Utility.ITempFile tf, Options options, double sample_percent)
         {
             var blockhasher = Library.Utility.HashAlgorithmHelper.Create(options.BlockHashAlgorithm);
  
@@ -228,7 +228,7 @@ namespace Duplicati.Library.Main.Operation
                     // with correct file hashes and blocklist hashes
                     using (var fl = db.CreateFilelist(vol.Name))
                     {
-                        using (var rd = new Volumes.FilesetVolumeReader(parsedInfo.CompressionModule, tf, options))
+                        using (var rd = new Volumes.FilesetVolumeReader(parsedInfo.CompressionModule, tf.OpenRead(), options))
                             foreach (var f in rd.Files)
                                 fl.Add(f.Path, f.Size, f.Hash, f.Metasize, f.Metahash, f.BlocklistHashes, f.Type, f.Time);
 
@@ -240,7 +240,7 @@ namespace Duplicati.Library.Main.Operation
                     IEnumerable<KeyValuePair<Duplicati.Library.Interface.TestEntryStatus, string>> combined = new KeyValuePair<Duplicati.Library.Interface.TestEntryStatus, string>[0];
 
                     //Compare with db and see that all hashes and volumes are listed
-                    using (var rd = new Volumes.IndexVolumeReader(parsedInfo.CompressionModule, tf, options, hashsize))
+                    using (var rd = new Volumes.IndexVolumeReader(parsedInfo.CompressionModule, tf.OpenRead(), options, hashsize))
                         foreach (var v in rd.Volumes)
                         {
                             blocklinks.Add(new Tuple<string, string, long>(v.Filename, v.Hash, v.Length));
@@ -264,7 +264,7 @@ namespace Duplicati.Library.Main.Operation
                     return new KeyValuePair<string, IEnumerable<KeyValuePair<TestEntryStatus, string>>>(vol.Name, combined.ToList());
                 case RemoteVolumeType.Blocks:
                     using (var bl = db.CreateBlocklist(vol.Name))
-                    using (var rd = new Volumes.BlockVolumeReader(parsedInfo.CompressionModule, tf, options))
+                    using (var rd = new Volumes.BlockVolumeReader(parsedInfo.CompressionModule, tf.OpenRead(), options))
                     {
                         //Verify that all blocks are in the file
                         foreach (var b in rd.Blocks)

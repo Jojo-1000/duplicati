@@ -155,7 +155,7 @@ namespace Duplicati.Library.Main.Operation
 
                                     downloadedVolumes.Add(new KeyValuePair<string, long>(entry.Name, entry.Size));
                                     var inst = VolumeBase.ParseFilename(entry.Name);
-                                    using (var f = new BlockVolumeReader(inst.CompressionModule, tmpfile, m_options))
+                                    using (var f = new BlockVolumeReader(inst.CompressionModule, tmpfile.OpenRead(), m_options))
                                     {
                                         foreach (var e in f.Blocks)
                                         {

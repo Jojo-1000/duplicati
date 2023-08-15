@@ -414,7 +414,7 @@ namespace Duplicati.Library.Main.Operation.Backup
 
             if (m_options.Dryrun)
             {
-                Logging.Log.WriteDryrunMessage(LOGTAG, "WouldUploadVolume", "Would upload volume: {0}, size: {1}", item.RemoteFilename, Library.Utility.Utility.FormatSizeString(new FileInfo(item.LocalFilename).Length));
+                Logging.Log.WriteDryrunMessage(LOGTAG, "WouldUploadVolume", "Would upload volume: {0}, size: {1}", item.RemoteFilename, Library.Utility.Utility.FormatSizeString(item.LocalTempfile.Length));
                 item.DeleteLocalFile();
                 return;
             }
@@ -428,13 +428,16 @@ namespace Duplicati.Library.Main.Operation.Backup
             if (!m_options.DisableStreamingTransfers && backend is IStreamingBackend streamingBackend)
             {
                 // A download throttle speed is not given to the ThrottledStream as we are only uploading data here
-                using (var fs = File.OpenRead(item.LocalFilename))
+                using (var fs = item.LocalTempfile.OpenRead())
                 using (var ts = new ThrottledStream(fs, m_initialUploadThrottleSpeed, 0))
                 using (var pgs = new ProgressReportingStream(ts, pg => HandleProgress(ts, pg, item.RemoteFilename)))
                     await streamingBackend.PutAsync(item.RemoteFilename, pgs, cancelToken).ConfigureAwait(false);
             }
             else
-                await backend.PutAsync(item.RemoteFilename, item.LocalFilename, cancelToken).ConfigureAwait(false);
+            {
+                using (TempFile.ToDiskFile(item.LocalTempfile, out string localFilename))
+                    await backend.PutAsync(item.RemoteFilename, localFilename, cancelToken).ConfigureAwait(false);
+            }
 
             var duration = DateTime.Now - begin;
             m_progressUpdater.EndFileProgress(item.RemoteFilename);

@@ -209,7 +209,7 @@ namespace Duplicati.Library.Main.Operation
                                     string hash;
                                     long size;
                                     using(var tf = backend.GetWithInfo(n.File.Name, out size, out hash))
-                                    using(var ifr = new IndexVolumeReader(n.CompressionModule, tf, m_options, m_options.BlockhashSize))
+                                    using(var ifr = new IndexVolumeReader(n.CompressionModule, tf.OpenRead(), m_options, m_options.BlockhashSize))
                                     {
                                         foreach(var rv in ifr.Volumes)
                                         {
@@ -396,7 +396,7 @@ namespace Duplicati.Library.Main.Operation
                                         try
                                         {
                                             using (var tmpfile = vol.TempFile)
-                                            using (var f = new BlockVolumeReader(RestoreHandler.GetCompressionModule(vol.Name), tmpfile, m_options))
+                                            using (var f = new BlockVolumeReader(RestoreHandler.GetCompressionModule(vol.Name), tmpfile.OpenRead(), m_options))
                                                 foreach (var b in f.Blocks)
                                                     if (mbl.SetBlockRestored(b.Key, b.Value))
                                                         if (f.ReadBlock(b.Key, buffer) == b.Value)

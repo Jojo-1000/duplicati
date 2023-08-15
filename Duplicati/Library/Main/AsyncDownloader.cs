@@ -8,7 +8,7 @@ namespace Duplicati.Library.Main
 {
     internal interface IAsyncDownloadedFile : IRemoteVolume
     {
-        Library.Utility.TempFile TempFile { get; }
+        Library.Utility.ITempFile TempFile { get; }
     }
 
     internal class AsyncDownloader : IEnumerable<IAsyncDownloadedFile>
@@ -20,7 +20,7 @@ namespace Duplicati.Library.Main
             private class AsyncDownloadedFile : IAsyncDownloadedFile
             {
                 private readonly Exception m_exception;
-                private Library.Utility.TempFile m_file;
+                private Library.Utility.ITempFile m_file;
                 
                 public string Name { get; private set; }
                 public string Hash { get; private set; }
@@ -34,7 +34,7 @@ namespace Duplicati.Library.Main
                 }
                 
 
-                public Library.Utility.TempFile TempFile
+                public Library.Utility.ITempFile TempFile
                 {
                     get
                     {
@@ -45,7 +45,7 @@ namespace Duplicati.Library.Main
                     }
                 }
                 
-                public AsyncDownloadedFile(string name, string hash, long size, Library.Utility.TempFile tempfile, Exception exception)
+                public AsyncDownloadedFile(string name, string hash, long size, Library.Utility.ITempFile tempfile, Exception exception)
                 {
                     this.Name = name;
                     this.Hash = hash;
@@ -103,7 +103,7 @@ namespace Duplicati.Library.Main
                 
                 string hash = null;
                 long size = -1;
-                Library.Utility.TempFile file = null;
+                Library.Utility.ITempFile file = null;
                 Exception exception = null;
                 try
                 {
@@ -151,4 +151,5 @@ namespace Duplicati.Library.Main
             return this.GetEnumerator();
         }
     }
+
 }

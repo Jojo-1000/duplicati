@@ -48,14 +48,10 @@ namespace Duplicati.Library.Main.Operation.Common
             /// </summary>
             public string RemoteFilename;
             /// <summary>
-            /// The name of the local file
-            /// </summary>
-            public string LocalFilename { get { return LocalTempfile; } }
-            /// <summary>
             /// A reference to a temporary file that is disposed upon
             /// failure or completion of the item
             /// </summary>
-            public TempFile LocalTempfile;
+            public ITempFile LocalTempfile;
             /// <summary>
             /// True if the item has been encrypted
             /// </summary>
@@ -87,8 +83,9 @@ namespace Duplicati.Library.Main.Operation.Common
 
             public void SetLocalfilename(string name)
             {
-                this.LocalTempfile = Library.Utility.TempFile.WrapExistingFile(name);
-                this.LocalTempfile.Protected = true;
+                TempFile temp = Library.Utility.TempFile.WrapExistingFile(name);
+                temp.Protected = true;
+                this.LocalTempfile = temp;
             }
 
             public void Encrypt(Options options)
@@ -97,7 +94,7 @@ namespace Duplicati.Library.Main.Operation.Common
                 {
                     var tempfile = new Library.Utility.TempFile();
                     using (var enc = DynamicLoader.EncryptionLoader.GetModule(options.EncryptionModule, options.Passphrase, options.RawOptions))
-                        enc.Encrypt(this.LocalFilename, tempfile);
+                        enc.Encrypt(this.LocalTempfile.OpenRead(), tempfile.OpenWrite());
 
                     this.DeleteLocalFile();
 
@@ -108,11 +105,10 @@ namespace Duplicati.Library.Main.Operation.Common
                 }
             }
 
-            public static string CalculateFileHash(string filename)
+            public static string CalculateFileHash(Stream inputStream)
             {
-                using (System.IO.FileStream fs = System.IO.File.OpenRead(filename))
                 using (var hasher = Duplicati.Library.Utility.HashAlgorithmHelper.Create(VOLUME_HASH))
-                    return Convert.ToBase64String(hasher.ComputeHash(fs));
+                    return Convert.ToBase64String(hasher.ComputeHash(inputStream));
             }
 
 
@@ -120,8 +116,9 @@ namespace Duplicati.Library.Main.Operation.Common
             {
                 if (Hash == null || Size < 0)
                 {
-                    Hash = CalculateFileHash(this.LocalFilename);
-                    Size = new System.IO.FileInfo(this.LocalFilename).Length;
+                    using (Stream input = this.LocalTempfile.OpenRead())
+                        Hash = CalculateFileHash(input);
+                    Size = LocalTempfile.Length;
                     return true;
                 }
 
@@ -134,7 +131,8 @@ namespace Duplicati.Library.Main.Operation.Common
                 {
                     try
                     {
-                        this.LocalTempfile.Protected = false;
+                        if(this.LocalTempfile is TempFile tempFile)
+                            tempFile.Protected = false;
                         this.LocalTempfile.Dispose();
                     }
                     catch (Exception ex) { Logging.Log.WriteWarningMessage(LOGTAG, "DeleteTemporaryFileError", ex, "Failed to dispose temporary file: {0}", this.LocalTempfile); }

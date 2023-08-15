@@ -19,14 +19,24 @@
 #endregion
 using System;
 using System.Collections.Generic;
+using System.IO;
 using Duplicati.Library.Common.IO;
 
 namespace Duplicati.Library.Utility
 {
+    public interface ITempFile : IDisposable
+    {
+        System.IO.Stream OpenRead();
+        System.IO.Stream OpenWrite();
+
+        long Length { get; }
+
+    }
+
     /// <summary>
     /// This class represents a temporary file that will be automatically deleted when disposed
     /// </summary>
-    public class TempFile : IDisposable
+    public class TempFile : ITempFile
     {
         /// <summary>
         /// The prefix applied to all temporary files
@@ -35,6 +45,50 @@ namespace Duplicati.Library.Utility
 
         private string m_path;
         private bool m_protect;
+
+        /// <summary>
+        /// Create a temp file or a memory buffer for file contents.
+        /// </summary>
+        /// <param name="sizeHint">Estimate of file size, to guide whether file should be placed in memory.</param>
+        /// <returns>TempFile or TempMemoryFile instance</returns>
+        public static ITempFile Create(long sizeHint = -1)
+        {
+            // Max size in memory 100MiB
+            const long maxSize = 100L * 1024L * 1024L;
+            if (sizeHint == -1 || sizeHint > maxSize)
+            {
+                return new TempFile();
+            }
+            else
+            {
+                return new TempMemoryFile((int)sizeHint);
+            }
+        }
+
+        /// <summary>
+        /// Copies the temp file contents to disk, if not already.
+        /// </summary>
+        /// <param name="tempFile">ITempFile which might be in memory only</param>
+        /// <param name="localFilename">The filename of the temp file</param>
+        /// <returns>Disposable which will delete a temp file on dispose, or null if no new file was created.</returns>
+        public static IDisposable ToDiskFile(ITempFile tempFile, out string localFilename)
+        {
+            // TODO: Make async somehow
+            if (tempFile is TempFile f)
+            {
+                localFilename = f;
+                return null;
+            }
+            else
+            {
+                TempFile tmp = new TempFile();
+                localFilename = tmp;
+                using (var i = tempFile.OpenRead())
+                using (var o = tmp.OpenWrite())
+                    Utility.CopyStream(i, o);
+                return tmp;
+            }
+        }
 
 #if DEBUG
         //In debug mode, we track the creation of temporary files, and encode the generating method into the name
@@ -214,6 +268,18 @@ namespace Duplicati.Library.Utility
             string p = m_path;
             m_path = tf.m_path;
             tf.m_path = p;
+        }
+
+        public long Length { get => new FileInfo(m_path).Length; }
+
+        public Stream OpenRead()
+        {
+            return File.OpenRead(m_path);
+        }
+
+        public Stream OpenWrite()
+        {
+            return File.OpenWrite(m_path);
         }
     }
 }

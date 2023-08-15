@@ -59,8 +59,8 @@ namespace Duplicati.Library.Main
 
         public interface IDownloadWaitHandle
         {
-            TempFile Wait();
-            TempFile Wait(out string hash, out long size);
+            ITempFile Wait();
+            ITempFile Wait(out string hash, out long size);
         }
 
         private class FileEntryItem : IDownloadWaitHandle
@@ -74,14 +74,10 @@ namespace Duplicati.Library.Main
             /// </summary>
             public string RemoteFilename;
             /// <summary>
-            /// The name of the local file
-            /// </summary>
-            public string LocalFilename { get { return LocalTempfile; } }
-            /// <summary>
             /// A reference to a temporary file that is disposed upon
             /// failure or completion of the item
             /// </summary>
-            public TempFile LocalTempfile;
+            public ITempFile LocalTempfile;
             /// <summary>
             /// True if the item has been encrypted
             /// </summary>
@@ -150,8 +146,9 @@ namespace Duplicati.Library.Main
 
             public void SetLocalfilename(string name)
             {
-                this.LocalTempfile = Library.Utility.TempFile.WrapExistingFile(name);
-                this.LocalTempfile.Protected = true;
+                TempFile temp = Library.Utility.TempFile.WrapExistingFile(name);
+                temp.Protected = true;
+                this.LocalTempfile = temp;
             }
 
             public void SignalComplete()
@@ -164,16 +161,16 @@ namespace Duplicati.Library.Main
                 DoneEvent.WaitOne();
             }
 
-            TempFile IDownloadWaitHandle.Wait()
+            ITempFile IDownloadWaitHandle.Wait()
             {
                 this.WaitForComplete();
                 if (Exception != null)
                     throw Exception;
 
-                return (TempFile)this.Result;
+                return (ITempFile)this.Result;
             }
 
-            TempFile IDownloadWaitHandle.Wait(out string hash, out long size)
+            ITempFile IDownloadWaitHandle.Wait(out string hash, out long size)
             {
                 this.WaitForComplete();
 
@@ -183,15 +180,15 @@ namespace Duplicati.Library.Main
                 hash = this.Hash;
                 size = this.Size;
 
-                return (TempFile)this.Result;
+                return (ITempFile)this.Result;
             }
 
             public void Encrypt(Library.Interface.IEncryption encryption, IBackendWriter stat)
             {
                 if (encryption != null && !this.Encrypted)
                 {
-                    var tempfile = new Library.Utility.TempFile();
-                    encryption.Encrypt(this.LocalFilename, tempfile);
+                    var tempfile = TempFile.Create(this.LocalTempfile.Length);
+                    encryption.Encrypt(this.LocalTempfile.OpenRead(), tempfile.OpenWrite());
                     this.DeleteLocalFile(stat);
                     this.LocalTempfile = tempfile;
                     this.Hash = null;
@@ -204,8 +201,9 @@ namespace Duplicati.Library.Main
             {
                 if (Hash == null || Size < 0)
                 {
-                    Hash = CalculateFileHash(this.LocalFilename);
-                    Size = new System.IO.FileInfo(this.LocalFilename).Length;
+                    using (var s = this.LocalTempfile.OpenRead())
+                        Hash = CalculateFileHash(s);
+                    Size = this.LocalTempfile.Length;
                     return true;
                 }
 
@@ -216,7 +214,7 @@ namespace Duplicati.Library.Main
             {
                 if (this.LocalTempfile != null)
                     try { this.LocalTempfile.Dispose(); }
-                catch (Exception ex) { Logging.Log.WriteWarningMessage(LOGTAG, "DeleteTemporaryFileError", ex, "Failed to dispose temporary file: {0}", this.LocalTempfile); }
+                    catch (Exception ex) { Logging.Log.WriteWarningMessage(LOGTAG, "DeleteTemporaryFileError", ex, "Failed to dispose temporary file: {0}", this.LocalTempfile); }
                     finally { this.LocalTempfile = null; }
             }
 
@@ -399,7 +397,8 @@ namespace Duplicati.Library.Main
             }
 
             if (m_taskControl != null)
-                m_taskControl.StateChangedEvent += (state) => {
+                m_taskControl.StateChangedEvent += (state) =>
+                {
                     if (state == TaskControlState.Abort)
                         m_thread.Abort();
                 };
@@ -531,7 +530,7 @@ namespace Duplicati.Library.Main
                                     try
                                     {
                                         var names = m_backend.DNSName ?? new string[0];
-                                        foreach(var name in names)
+                                        foreach (var name in names)
                                             if (!string.IsNullOrWhiteSpace(name))
                                                 System.Net.Dns.GetHostEntry(name);
                                     }
@@ -662,7 +661,7 @@ namespace Duplicati.Library.Main
                 {
                     var hashsize = HashAlgorithmHelper.Create(m_options.BlockHashAlgorithm).HashSize / 8;
                     wr = new IndexVolumeWriter(m_options);
-                    using (var rd = new IndexVolumeReader(p.CompressionModule, item.Indexfile.Item2.LocalFilename, m_options, hashsize))
+                    using (var rd = new IndexVolumeReader(p.CompressionModule, item.Indexfile.Item2.LocalTempfile.OpenRead(), m_options, hashsize))
                         wr.CopyFrom(rd, x => x == oldname ? newname : x);
                     item.Indexfile.Item1.Dispose();
                     item.Indexfile = new Tuple<IndexVolumeWriter, FileEntryItem>(wr, item.Indexfile.Item2);
@@ -730,13 +729,18 @@ namespace Duplicati.Library.Main
 
             if (m_backend is Library.Interface.IStreamingBackend && !m_options.DisableStreamingTransfers)
             {
-                using (var fs = System.IO.File.OpenRead(item.LocalFilename))
-                using (var ts = new ThrottledStream(fs, m_options.MaxUploadPrSecond, 0))
+                using (var s = item.LocalTempfile.OpenRead())
+                using (var ts = new ThrottledStream(s, m_options.MaxUploadPrSecond, 0))
                 using (var pgs = new Library.Utility.ProgressReportingStream(ts, pg => HandleProgress(ts, pg)))
                     ((Library.Interface.IStreamingBackend)m_backend).PutAsync(item.RemoteFilename, pgs, CancellationToken.None).Wait();
             }
             else
-                m_backend.PutAsync(item.RemoteFilename, item.LocalFilename, CancellationToken.None).Wait();
+            {
+                using (TempFile.ToDiskFile(item.LocalTempfile, out string localFilename))
+                {
+                    m_backend.PutAsync(item.RemoteFilename, localFilename, CancellationToken.None).Wait();
+                }
+            }
 
             var duration = DateTime.Now - begin;
             Logging.Log.WriteProfilingMessage(LOGTAG, "UploadSpeed", "Uploaded {0} in {1}, {2}/s", Library.Utility.Utility.FormatSizeString(item.Size), duration, Library.Utility.Utility.FormatSizeString((long)(item.Size / duration.TotalSeconds)));
@@ -758,7 +762,7 @@ namespace Duplicati.Library.Main
             item.DeleteLocalFile(m_statwriter);
         }
 
-        private TempFile coreDoGetPiping(FileEntryItem item, Interface.IEncryption useDecrypter, out long retDownloadSize, out string retHashcode)
+        private ITempFile coreDoGetPiping(FileEntryItem item, Interface.IEncryption useDecrypter, out long retDownloadSize, out string retHashcode)
         {
             // With piping allowed, we will parallelize the operation with buffered pipes to maximize throughput:
             // Separated: Download (only for streaming) - Hashing - Decryption
@@ -776,7 +780,7 @@ namespace Duplicati.Library.Main
             DirectStreamLink linkForkDecryptor = null;
 
             // keep potential temp files and their streams for cleanup (cannot use using here).
-            TempFile retTarget = null, dlTarget = null, decryptTarget = null;
+            ITempFile retTarget = null, dlTarget = null, decryptTarget = null;
             System.IO.Stream dlToStream = null, decryptToStream = null;
             try
             {
@@ -785,8 +789,8 @@ namespace Duplicati.Library.Main
                     dlTarget = new TempFile();
                 else if (enableStreaming && useDecrypter == null)
                 {
-                    dlTarget = new TempFile();
-                    dlToStream = System.IO.File.OpenWrite(dlTarget);
+                    dlTarget = TempFile.Create(item.Size);
+                    dlToStream = dlTarget.OpenWrite();
                     nextTierWriter = dlToStream; // actually write through to file.
                 }
 
@@ -796,8 +800,8 @@ namespace Duplicati.Library.Main
                     linkForkDecryptor = new DirectStreamLink(1 << 16, false, false, nextTierWriter);
                     nextTierWriter = linkForkDecryptor.WriterStream;
                     linkForkDecryptor.SetKnownLength(item.Size, false); // Set length to allow AES-decryption (not streamable yet)
-                    decryptTarget = new TempFile();
-                    decryptToStream = System.IO.File.OpenWrite(decryptTarget);
+                    decryptTarget = TempFile.Create(item.Size);
+                    decryptToStream = decryptTarget.OpenWrite();
                     taskDecrypter = new System.Threading.Tasks.Task(() =>
                             {
                                 using (var input = linkForkDecryptor.ReaderStream)
@@ -837,9 +841,10 @@ namespace Duplicati.Library.Main
                     }
                     else
                     {
-                        m_backend.Get(item.RemoteFilename, dlTarget);
-                        retDownloadSize = new System.IO.FileInfo(dlTarget).Length;
-                        using (dlToStream = System.IO.File.OpenRead(dlTarget))
+                        // dlTarget is TempFile (see above)
+                        m_backend.Get(item.RemoteFilename, (TempFile)dlTarget);
+                        retDownloadSize = dlTarget.Length;
+                        using (dlToStream = dlTarget.OpenRead())
                         {
                             taskHasher.Start(); // We do not start tasks earlier to be sure the input always gets closed. 
                             if (taskDecrypter != null) taskDecrypter.Start();
@@ -895,19 +900,19 @@ namespace Duplicati.Library.Main
             return retTarget;
         }
 
-        private TempFile coreDoGetSequential(FileEntryItem item, Interface.IEncryption useDecrypter, out long retDownloadSize, out string retHashcode)
+        private ITempFile coreDoGetSequential(FileEntryItem item, Interface.IEncryption useDecrypter, out long retDownloadSize, out string retHashcode)
         {
             retHashcode = null;
             retDownloadSize = -1;
-            TempFile retTarget, dlTarget = null, decryptTarget = null;
+            ITempFile retTarget, dlTarget = null, decryptTarget = null;
             try
             {
-                dlTarget = new Library.Utility.TempFile();
                 if (m_backend is Library.Interface.IStreamingBackend && !m_options.DisableStreamingTransfers)
                 {
+                    dlTarget = TempFile.Create(item.Size);
                     Func<string> getFileHash;
                     // extended to use stacked streams
-                    using (var fs = System.IO.File.OpenWrite(dlTarget))
+                    using (var fs = dlTarget.OpenWrite())
                     using (var hs = GetFileHasherStream(fs, System.Security.Cryptography.CryptoStreamMode.Write, out getFileHash))
                     using (var ss = new ShaderStream(hs, true))
                     {
@@ -921,9 +926,11 @@ namespace Duplicati.Library.Main
                 }
                 else
                 {
-                    m_backend.Get(item.RemoteFilename, dlTarget);
-                    retDownloadSize = new System.IO.FileInfo(dlTarget).Length;
-                    retHashcode = CalculateFileHash(dlTarget);
+                    // Create temp file on disk
+                    dlTarget = new Library.Utility.TempFile();
+                    m_backend.Get(item.RemoteFilename, (TempFile)dlTarget);
+                    retDownloadSize = new System.IO.FileInfo((TempFile)dlTarget).Length;
+                    retHashcode = CalculateFileHash((TempFile)dlTarget);
                 }
 
                 // Decryption is not placed in the stream stack because there seemed to be an effort
@@ -931,10 +938,10 @@ namespace Duplicati.Library.Main
                 // in which part of the stack the source of an exception resides.
                 if (useDecrypter != null)
                 {
-                    decryptTarget = new Library.Utility.TempFile();
+                    decryptTarget = TempFile.Create(item.Size);
                     lock (m_encryptionLock)
                     {
-                        try { useDecrypter.Decrypt(dlTarget, decryptTarget); }
+                        try { useDecrypter.Decrypt(dlTarget.OpenRead(), decryptTarget.OpenWrite()); }
                         // If we fail here, make sure that we throw a crypto exception
                         catch (System.Security.Cryptography.CryptographicException) { throw; }
                         catch (Exception ex) { throw new System.Security.Cryptography.CryptographicException(ex.Message, ex); }
@@ -959,7 +966,7 @@ namespace Duplicati.Library.Main
 
         private void DoGet(FileEntryItem item)
         {
-            Library.Utility.TempFile tmpfile = null;
+            Library.Utility.ITempFile tmpfile = null;
             m_statwriter.SendEvent(BackendActionType.Get, BackendEventType.Started, item.RemoteFilename, item.Size);
 
             try
@@ -1036,7 +1043,7 @@ namespace Duplicati.Library.Main
                     if (!string.IsNullOrEmpty(item.Hash))
                     {
                         if (fileHash != item.Hash)
-                            throw new HashMismatchException(Strings.Controller.HashMismatchError(tmpfile, item.Hash, fileHash));
+                            throw new HashMismatchException(Strings.Controller.HashMismatchError((tmpfile as TempFile)?.Name, item.Hash, fileHash));
                     }
                     else
                         item.Hash = fileHash;
@@ -1255,7 +1262,7 @@ namespace Duplicati.Library.Main
                 throw m_lastException;
         }
 
-        public Library.Utility.TempFile GetWithInfo(string remotename, out long size, out string hash)
+        public Library.Utility.ITempFile GetWithInfo(string remotename, out long size, out string hash)
         {
             if (m_lastException != null)
                 throw m_lastException;
@@ -1276,10 +1283,10 @@ namespace Duplicati.Library.Main
             if (m_lastException != null)
                 throw m_lastException;
 
-            return (Library.Utility.TempFile)req.Result;
+            return (Library.Utility.ITempFile)req.Result;
         }
 
-        public Library.Utility.TempFile Get(string remotename, long size, string hash)
+        public Library.Utility.ITempFile Get(string remotename, long size, string hash)
         {
             if (m_lastException != null)
                 throw m_lastException;
@@ -1299,7 +1306,7 @@ namespace Duplicati.Library.Main
             if (m_lastException != null)
                 throw m_lastException;
 
-            return (Library.Utility.TempFile)req.Result;
+            return (Library.Utility.ITempFile)req.Result;
         }
 
         public IDownloadWaitHandle GetAsync(string remotename, long size, string hash)

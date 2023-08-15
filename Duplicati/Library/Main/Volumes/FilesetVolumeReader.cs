@@ -374,8 +374,8 @@ namespace Duplicati.Library.Main.Volumes
         {
         }
 
-        public FilesetVolumeReader(string compressor, string file, Options options)
-            : base(compressor, file, options)
+        public FilesetVolumeReader(string compressor, [Library.Utility.AssumesOwnership]Stream inputStream, Options options)
+            : base(compressor, inputStream, options)
         {
         }
 

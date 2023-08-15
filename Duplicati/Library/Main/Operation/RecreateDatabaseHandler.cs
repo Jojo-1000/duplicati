@@ -217,7 +217,7 @@ namespace Duplicati.Library.Main.Operation
 
                                 if (!hasUpdatedOptions && (!updating || autoDetectBlockSize)) 
                                 {
-                                    VolumeReaderBase.UpdateOptionsFromManifest(parsed.CompressionModule, tmpfile, m_options);
+                                    VolumeReaderBase.UpdateOptionsFromManifest(parsed.CompressionModule, tmpfile.OpenRead(), m_options);
                                     hasUpdatedOptions = true;
                                     // Recompute the cached sizes
                                     blocksize = m_options.Blocksize;
@@ -228,12 +228,12 @@ namespace Duplicati.Library.Main.Operation
                                 var filesetid = restoredb.CreateFileset(volumeIds[entry.Name], parsed.Time, tr);
                                 
                                 // retrieve fileset data from dlist
-                                var filesetData = VolumeReaderBase.GetFilesetData(parsed.CompressionModule, tmpfile, m_options);
+                                var filesetData = VolumeReaderBase.GetFilesetData(parsed.CompressionModule, tmpfile.OpenRead(), m_options);
                                 
                                 // update fileset using filesetData
                                 restoredb.UpdateFullBackupStateInFileset(filesetid, filesetData.IsFullBackup);
 
-                                using(var filelistreader = new FilesetVolumeReader(parsed.CompressionModule, tmpfile, m_options))
+                                using(var filelistreader = new FilesetVolumeReader(parsed.CompressionModule, tmpfile.OpenRead(), m_options))
                                     foreach(var fe in filelistreader.Files.Where(x => Library.Utility.FilterExpression.Matches(filter, x.Path)))
                                     {
                                         try
@@ -366,7 +366,7 @@ namespace Duplicati.Library.Main.Operation
                                     if (sf.Hash != null && sf.Size > 0)
                                         restoredb.UpdateRemoteVolume(sf.Name, RemoteVolumeState.Verified, sf.Size, sf.Hash, tr);
                 
-                                    using(var svr = new IndexVolumeReader(RestoreHandler.GetCompressionModule(sf.Name), tmpfile, m_options, hashsize))
+                                    using(var svr = new IndexVolumeReader(RestoreHandler.GetCompressionModule(sf.Name), tmpfile.OpenRead(), m_options, hashsize))
                                     {
                                         foreach(var a in svr.Volumes)
                                         {
@@ -470,7 +470,7 @@ namespace Duplicati.Library.Main.Operation
                             try
                             {
                                 using (var tmpfile = sf.TempFile)
-                                using (var rd = new BlockVolumeReader(RestoreHandler.GetCompressionModule(sf.Name), tmpfile, m_options))
+                                using (var rd = new BlockVolumeReader(RestoreHandler.GetCompressionModule(sf.Name), tmpfile.OpenRead(), m_options))
                                 using (var tr = restoredb.BeginTransaction())
                                 {
                                     if (m_result.TaskControlRendevouz() == TaskControlState.Stop)

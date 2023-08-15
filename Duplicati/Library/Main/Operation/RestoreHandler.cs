@@ -401,7 +401,7 @@ namespace Duplicati.Library.Main.Operation
                         }
                     
                         using(var tmpfile = blockvolume.TempFile)
-                        using(var blocks = new BlockVolumeReader(GetCompressionModule(blockvolume.Name), tmpfile, m_options))
+                        using(var blocks = new BlockVolumeReader(GetCompressionModule(blockvolume.Name), tmpfile.OpenRead(), m_options))
                             PatchWithBlocklist(database, blocks, m_options, result, m_blockbuffer, metadatastorage);
                     }
                     catch (Exception ex)

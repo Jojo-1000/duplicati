@@ -14,8 +14,8 @@ namespace Duplicati.Library.Main.Volumes
         {
         }
 
-        public BlockVolumeReader(string compressor, string file, Options options)
-            : base(compressor, file, options)
+        public BlockVolumeReader(string compressor, [Library.Utility.AssumesOwnership] Stream inputStream, Options options)
+            : base(compressor, inputStream, options)
         {
         }
 

@@ -93,7 +93,7 @@ namespace Duplicati.UnitTest
                     {
                         string dlistFile = Path.Combine(this.TARGETFOLDER, volume.File.Name);
                         filelistFiles.Add(dlistFile);
-                        VolumeBase.FilesetData filesetData = VolumeReaderBase.GetFilesetData(volume.CompressionModule, dlistFile, new Options(options));
+                        VolumeBase.FilesetData filesetData = VolumeReaderBase.GetFilesetData(volume.CompressionModule, File.OpenRead(dlistFile), new Options(options));
                         map[volume.Time] = filesetData.IsFullBackup ? BackupType.FULL_BACKUP : BackupType.PARTIAL_BACKUP;
                     }
                 }

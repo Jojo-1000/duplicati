@@ -5,6 +5,7 @@ using System.Text;
 using System.IO;
 using Newtonsoft.Json;
 using Duplicati.Library.Interface;
+using Duplicati.Library.Utility;
 
 namespace Duplicati.Library.Main.Volumes
 {
@@ -394,8 +395,8 @@ namespace Duplicati.Library.Main.Volumes
             m_hashsize = hashsize;
         }
 
-        public IndexVolumeReader(string compressor, string file, Options options, long hashsize)
-            : base(compressor, file, options)
+        public IndexVolumeReader(string compressor, [AssumesOwnership] Stream inputStream, Options options, long hashsize)
+            : base(compressor, inputStream, options)
         {
             m_hashsize = hashsize;
         }
