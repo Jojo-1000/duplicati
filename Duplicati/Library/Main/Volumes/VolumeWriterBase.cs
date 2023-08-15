@@ -8,12 +8,11 @@ namespace Duplicati.Library.Main.Volumes
     public abstract class VolumeWriterBase : VolumeBase, IDisposable
     {
         protected ICompression m_compression;
-        protected Library.Utility.TempFile m_localfile;
+        protected Library.Utility.ITempFile m_localfile;
         protected Stream m_localFileStream;
         protected string m_volumename;
-        public string LocalFilename { get { return m_localfile; } }
         public string RemoteFilename { get { return m_volumename; } }
-        public Library.Utility.TempFile TempFile { get { return m_localfile; } }
+        public Library.Utility.ITempFile TempFile { get { return m_localfile; } }
 
         public abstract RemoteVolumeType FileType { get; }
 
@@ -50,11 +49,11 @@ namespace Duplicati.Library.Main.Volumes
             if (!string.IsNullOrWhiteSpace(options.AsynchronousUploadFolder))
                 m_localfile = Library.Utility.TempFile.CreateInFolder(options.AsynchronousUploadFolder, true);
             else
-                m_localfile = new Library.Utility.TempFile();
+                m_localfile = Library.Utility.TempFile.Create(options.VolumeSize);
 
             ResetRemoteFilename(options, timestamp);
 
-            m_localFileStream = new System.IO.FileStream(m_localfile, FileMode.Create, FileAccess.Write, FileShare.Read);
+            m_localFileStream = m_localfile.OpenWrite();
             m_compression = DynamicLoader.CompressionLoader.GetModule(options.CompressionModule, m_localFileStream, ArchiveMode.Write, options.RawOptions);
 
             if (m_compression == null)
@@ -75,7 +74,7 @@ namespace Duplicati.Library.Main.Volumes
         internal BackendHandler.FileEntryItem CreateFileEntryForUpload(Options options)
         {
             var fileEntry = new BackendHandler.FileEntryItem(BackendActionType.Put, this.RemoteFilename);
-            fileEntry.SetLocalfilename(this.LocalFilename);
+            fileEntry.LocalTempfile = this.TempFile;
             fileEntry.Encrypt(options);
             fileEntry.UpdateHashAndSize(options);
             return fileEntry;
@@ -93,7 +92,8 @@ namespace Duplicati.Library.Main.Volumes
 
             if (m_localfile != null)
             {
-                m_localfile.Protected = false;
+                if(m_localfile is Library.Utility.TempFile tmp)
+                    tmp.Protected = false;
                 try { m_localfile.Dispose(); }
                 finally { m_localfile = null; }
             }

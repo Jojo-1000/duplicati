@@ -156,7 +156,6 @@ namespace Duplicati.Library.Main.Operation
                             }
                             else
                             {
-                                using (var tf = new Library.Utility.TempFile())
                                 using (var vol = new Volumes.FilesetVolumeWriter(m_options, ts))
                                 {
                                     var isOriginalFilesetFullBackup = db.IsFilesetFullBackup(tsOriginal);

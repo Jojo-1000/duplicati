@@ -92,7 +92,7 @@ namespace Duplicati.Library.Main.Operation.Common
             {
                 if (!this.Encrypted && !options.NoEncryption)
                 {
-                    var tempfile = new Library.Utility.TempFile();
+                    var tempfile = TempFile.Create(LocalTempfile.Length);
                     using (var enc = DynamicLoader.EncryptionLoader.GetModule(options.EncryptionModule, options.Passphrase, options.RawOptions))
                         enc.Encrypt(this.LocalTempfile.OpenRead(), tempfile.OpenWrite());
 

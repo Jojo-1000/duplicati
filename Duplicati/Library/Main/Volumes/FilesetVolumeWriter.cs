@@ -8,7 +8,7 @@ namespace Duplicati.Library.Main.Volumes
 {
     public class FilesetVolumeWriter : VolumeWriterBase
     {
-        private readonly Library.Utility.TempFile m_tempFile;
+        private readonly Library.Utility.ITempFile m_tempFile;
         private readonly Stream m_tempStream;
         private StreamWriter m_streamwriter;
         private readonly JsonWriter m_writer;
@@ -20,8 +20,9 @@ namespace Duplicati.Library.Main.Volumes
         public FilesetVolumeWriter(Options options, DateTime timestamp)
             : base(options, timestamp)
         {
-            m_tempFile = new Library.Utility.TempFile();
-            m_tempStream = File.Open(m_tempFile, FileMode.Create, FileAccess.ReadWrite);
+            // TODO: Why is not the base file used?
+            m_tempFile = Library.Utility.TempFile.Create();
+            m_tempStream = m_tempFile.OpenReadWrite();
             m_streamwriter = new StreamWriter(m_tempStream, ENCODING);
             m_writer = new JsonTextWriter(m_streamwriter);
             m_writer.WriteStartArray();

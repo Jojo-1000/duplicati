@@ -28,6 +28,7 @@ namespace Duplicati.Library.Utility
     {
         System.IO.Stream OpenRead();
         System.IO.Stream OpenWrite();
+        System.IO.Stream OpenReadWrite();
 
         long Length { get; }
 
@@ -280,6 +281,10 @@ namespace Duplicati.Library.Utility
         public Stream OpenWrite()
         {
             return File.OpenWrite(m_path);
+        }
+        public Stream OpenReadWrite()
+        {
+            return File.Open(m_path, FileMode.Create, FileAccess.ReadWrite);
         }
     }
 }

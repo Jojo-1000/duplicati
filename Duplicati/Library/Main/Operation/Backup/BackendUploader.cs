@@ -289,7 +289,7 @@ namespace Duplicati.Library.Main.Operation.Backup
         private async Task UploadVolumeWriter(VolumeWriterBase volumeWriter, Worker worker, CancellationToken cancelToken)
         {
             var fileEntry = new FileEntryItem(BackendActionType.Put, volumeWriter.RemoteFilename);
-            fileEntry.SetLocalfilename(volumeWriter.LocalFilename);
+            fileEntry.LocalTempfile = volumeWriter.TempFile;
             fileEntry.Encrypt(m_options);
             fileEntry.UpdateHashAndSize(m_options);
 

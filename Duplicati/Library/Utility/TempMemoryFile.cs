@@ -73,5 +73,9 @@ namespace Duplicati.Library.Utility
                 return m_stream;
             }
         }
+        public Stream OpenReadWrite()
+        {
+            return OpenWrite();
+        }
     }
 }

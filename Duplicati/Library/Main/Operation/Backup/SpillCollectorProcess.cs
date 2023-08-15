@@ -86,7 +86,7 @@ namespace Duplicati.Library.Main.Operation.Backup
 
                     var buffer = new byte[options.Blocksize];
 
-                    using (var rd = new BlockVolumeReader(options.CompressionModule, System.IO.File.OpenRead(source.BlockVolume.LocalFilename), options))
+                    using (var rd = new BlockVolumeReader(options.CompressionModule, source.BlockVolume.TempFile.OpenRead(), options))
                     {
                         foreach (var file in rd.Blocks)
                         {
@@ -129,7 +129,7 @@ namespace Duplicati.Library.Main.Operation.Backup
                     }
 
                     // Make sure they are out of the database
-                    System.IO.File.Delete(source.BlockVolume.LocalFilename);
+                    source.BlockVolume.TempFile?.Dispose();
                     await database.SafeDeleteRemoteVolumeAsync(source.BlockVolume.RemoteFilename).ConfigureAwait(false);
 
                     // Re-inject the target if it has content

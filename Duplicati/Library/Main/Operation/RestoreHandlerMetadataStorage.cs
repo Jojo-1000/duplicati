@@ -26,15 +26,15 @@ namespace Duplicati.Library.Main.Operation
         /// The tag used for logging
         /// </summary>
         private static readonly string LOGTAG = Logging.Log.LogTagFromType<RestoreHandlerMetadataStorage>();
-        private TempFile m_temp;
-        private FileStream m_stream;
+        private ITempFile m_temp;
+        private Stream m_stream;
         private long m_entries;
 
         private long m_filepos;
         public RestoreHandlerMetadataStorage()
         {
-            m_temp = new TempFile();
-            m_stream = File.Open(m_temp, FileMode.Truncate, FileAccess.ReadWrite, FileShare.None);
+            m_temp = TempFile.Create();
+            m_stream = m_temp.OpenReadWrite();
         }
 
         public void Add(string path, Stream data)
