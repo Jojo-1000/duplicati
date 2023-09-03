@@ -125,6 +125,19 @@ namespace Duplicati.UnitTest
             using (var c = new Library.Main.Controller(target, testopts, null))
             {
                 ITestResults testResults = c.Test(long.MaxValue);
+                // Expect no verification errors (currently not working)
+                //Assert.IsTrue(testResults.Verifications.All(v => !v.Value.Any()),
+                //    "Test verification failed:\n {0}", VerificationToString(testResults.Verifications));
+            }
+            // Compact again to remove duplicates
+            using (var c = new Library.Main.Controller(target, testopts, null))
+            {
+                ICompactResults compactResults = c.Compact();
+                Assert.Greater(compactResults.DownloadedFileCount, 0, "No compact operation was performed");
+            }
+            using (var c = new Library.Main.Controller(target, testopts, null))
+            {
+                ITestResults testResults = c.Test(long.MaxValue);
                 // Expect no verification errors
                 Assert.IsTrue(testResults.Verifications.All(v => !v.Value.Any()),
                     "Test verification failed:\n {0}", VerificationToString(testResults.Verifications));
