@@ -51,6 +51,7 @@
     <Compile Include="CompactDisruptionTests.cs" />
     <Compile Include="DeterministicErrorBackend.cs" />
     <Compile Include="DatabaseQueryTests.cs" />
+    <Compile Include="IssueTests.cs" />
     <Compile Include="SymLinkTests.cs" />
     <Compile Include="ControllerTests.cs" />
     <Compile Include="DeleteHandlerTests.cs" />
