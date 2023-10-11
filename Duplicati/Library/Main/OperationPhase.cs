@@ -21,6 +21,7 @@ namespace Duplicati.Library.Main
     public enum OperationPhase
     {
         Backup_Begin,
+        Backup_VerifyConsistency,
         Backup_PreBackupVerify,
         Backup_PostBackupTest,
         Backup_PreviousBackupFinalize,

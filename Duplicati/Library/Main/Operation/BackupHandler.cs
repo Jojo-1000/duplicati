@@ -442,6 +442,7 @@ namespace Duplicati.Library.Main.Operation
                         {
                             try
                             {
+                                m_result.OperationProgressUpdater.UpdatePhase(OperationPhase.Backup_VerifyConsistency);
                                 // Make sure the database is sane
                                 await db.VerifyConsistencyAsync(m_options.Blocksize, m_options.BlockhashSize, !m_options.DisableFilelistConsistencyChecks);
 
