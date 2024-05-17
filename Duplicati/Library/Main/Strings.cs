@@ -1,3 +1,23 @@
+// Copyright (C) 2024, The Duplicati Team
+// https://duplicati.com, hello@duplicati.com
+// 
+// Permission is hereby granted, free of charge, to any person obtaining a 
+// copy of this software and associated documentation files (the "Software"), 
+// to deal in the Software without restriction, including without limitation 
+// the rights to use, copy, modify, merge, publish, distribute, sublicense, 
+// and/or sell copies of the Software, and to permit persons to whom the 
+// Software is furnished to do so, subject to the following conditions:
+// 
+// The above copyright notice and this permission notice shall be included in 
+// all copies or substantial portions of the Software.
+// 
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS 
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER 
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING 
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
+// DEALINGS IN THE SOFTWARE.
 using System;
 using Duplicati.Library.Localization.Short;
 
@@ -123,10 +143,12 @@ namespace Duplicati.Library.Main.Strings
         public static string DebugretryerrorsShort { get { return LC.L(@"Show error messages when a retry is performed"); } }
         public static string UploadUnchangedBackupsLong { get { return LC.L(@"If no files have changed, Duplicati will not upload a backup set. If the backup data is used to verify that a backup was executed, this option will make Duplicati upload a backupset even if it is empty"); } }
         public static string UploadUnchangedBackupsShort { get { return LC.L(@"Upload empty backup files"); } }
-        public static string QuotasizeLong { get { return LC.L(@"This value can be used to set a known upper limit on the amount of space a backend has. If the backend reports the size itself, this value is ignored"); } }
-        public static string QuotasizeShort { get { return LC.L(@"A reported maximum storage"); } }
+        public static string QuotasizeLong { get { return LC.L(@"Set a limit to the amount of storage used on the backend (by this backup). This is in addition to the full backend quota, if available. Note: Backups will continue past the quota. This only creates warnings and error messages."); } }
+        public static string QuotasizeShort { get { return LC.L(@"Limit storage use"); } }
         public static string QuotaWarningThresholdLong { get { return LC.L(@"Sets a threshold for when to warn about the backend quota being nearly exceeded. It is given as a percentage, and a warning is generated if the amount of available quota is less than this percentage of the total backup size. If the backend does not report the quota information, this value will be ignored"); } }
         public static string QuotaWarningThresholdShort { get { return LC.L(@"Threshold for warning about low quota"); } }
+        public static string QuotaDisableLong(string optionname) { return LC.L(@"Disable the quota reported by the backend. --{0} can still be used to set a manual quota", optionname); }
+        public static string QuotaDisableShort { get { return LC.L(@"Disable backend quota"); } }
         public static string SymlinkpolicyShort { get { return LC.L(@"Symlink handling"); } }
         public static string SymlinkpolicyLong(string store, string ignore, string follow) { return LC.L(@"Use this option to handle symlinks differently. The ""{0}"" option will simply record a symlink with its name and destination, and a restore will recreate the symlink as a link. Use the option ""{1}"" to ignore all symlinks and not store any information about them. The option ""{2}"" will cause the symlinked target to be backed up and restored as a normal file with the symlink name. Early versions of Duplicati did not support this option and bevhaved as if ""{2}"" was specified.", store, ignore, follow); }
         public static string HardlinkpolicyShort { get { return LC.L(@"Hardlink handling"); } }
@@ -137,6 +159,10 @@ namespace Duplicati.Library.Main.Strings
         public static string VssusemappingShort { get { return LC.L(@"Map snapshots to a drive (Windows only)"); } }
         public static string BackupnameLong { get { return LC.L(@"A display name that is attached to this backup. Can be used to identify the backup when sending mail or running scripts."); } }
         public static string BackupnameShort { get { return LC.L(@"Name of the backup"); } }
+        public static string BackupidLong { get { return LC.L(@"A unique identification for this backup. Can be used to identify the backup when sending mail or running scripts."); } }
+        public static string BackupidShort { get { return LC.L(@"Backup ID"); } }
+        public static string MachineidLong { get { return LC.L(@"A unique identification of the machine running the backup. Can be used to identify the machine when sending mail or running scripts."); } }
+        public static string MachineidShort { get { return LC.L(@"Machine ID"); } }
         public static string CompressionextensionfileLong(string path) { return LC.L(@"This property can be used to point to a text file where each line contains a file extension that indicates a non-compressible file. Files that have an extension found in the file will not be compressed, but simply stored in the archive. The file format ignores any lines that do not start with a period, and considers a space to indicate the end of the extension. A default file is supplied, that also serves as an example. The default file is placed in {0}.", path); }
         public static string CompressionextensionfileShort { get { return LC.L(@"Manage non-compressible file extensions"); } }
         public static string BlocksizeLong { get { return LC.L(@"The block size determines how files are fragmented. Choosing a large value will cause a larger overhead on file changes, choosing a small value will cause a large overhead on storage of file lists. Note that the value cannot be changed after remote files are created."); } }
