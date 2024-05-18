@@ -66,7 +66,7 @@ namespace Duplicati.Library.Main.Volumes
         protected VolumeWriterBase(Options options, DateTime timestamp)
             : base(options)
         {
-            if (!string.IsNullOrWhiteSpace(options.AsynchronousUploadFolder))
+            if (options.HasAsynchronousUploadFolder)
                 m_localfile = Library.Utility.TempFile.CreateInFolder(options.AsynchronousUploadFolder, true);
             else
                 m_localfile = Library.Utility.TempFile.Create(options.VolumeSize);

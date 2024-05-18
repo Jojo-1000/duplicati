@@ -41,7 +41,8 @@ namespace Duplicati.Library.Main.Volumes
             : base(options, timestamp)
         {
             // TODO: Why is not the base file used?
-            m_tempFile = Library.Utility.TempFile.Create();
+            // TODO: The volume size is not accurate for fileset volumes, but they are usually smaller.
+            m_tempFile = Library.Utility.TempFile.Create(options.VolumeSize/2);
             m_tempStream = m_tempFile.OpenReadWrite();
             m_streamwriter = new StreamWriter(m_tempStream, ENCODING);
             m_writer = new JsonTextWriter(m_streamwriter);

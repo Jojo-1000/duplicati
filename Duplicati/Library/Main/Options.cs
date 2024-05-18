@@ -1076,6 +1076,17 @@ namespace Duplicati.Library.Main
         }
 
         /// <summary>
+        /// Whether an asynchronous upload folder was explicitly set
+        /// </summary>
+        public bool HasAsynchronousUploadFolder
+        {
+            get
+            {
+                return m_options.TryGetValue("asynchronous-upload-folder", out string value) && !string.IsNullOrEmpty(value);
+            }
+        }
+
+        /// <summary>
         /// Gets the logfile filename
         /// </summary>
         public string Logfile
