@@ -16,7 +16,7 @@ namespace Duplicati.Library.Backend.AliyunOSS
     /// en: https://www.alibabacloud.com/zh/product/object-storage-service
     /// zh: https://www.aliyun.com/product/oss
     /// </summary>
-    public class OSS : IBackend, IRenameEnabledBackend
+    public class OSS : IBackend, IBackendPagination, IRenameEnabledBackend
     {
         private static readonly string LOGTAG = Logging.Log.LogTagFromType<OSS>();
 
@@ -84,7 +84,10 @@ namespace Duplicati.Library.Backend.AliyunOSS
             });
         }
 
-        public IEnumerable<IFileEntry> List()
+        public Task<IList<IFileEntry>> ListAsync(CancellationToken cancelToken)
+            => this.CondensePaginatedListAsync(cancelToken);
+
+        public async IAsyncEnumerable<IFileEntry> ListEnumerableAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancelToken)
         {
             var bucketName = _ossOptions.BucketName;
 
@@ -92,12 +95,12 @@ namespace Duplicati.Library.Backend.AliyunOSS
 
             var client = GetClient(false);
 
-            var list = new List<OssObjectSummary>();
-            try
+            var nextMarker = string.Empty;
+            bool isTruncated;
+            do
             {
-                var nextMarker = string.Empty;
-                var isTruncated = false;
-                do
+                ObjectListing result;
+                try
                 {
                     var listObjectsRequest = new ListObjectsRequest(bucketName)
                     {
@@ -105,53 +108,38 @@ namespace Duplicati.Library.Backend.AliyunOSS
                         Marker = nextMarker,
                         Prefix = prefix,
                     };
-                    var result = client.ListObjects(listObjectsRequest);
+                    // no cancellation is supported
+                    result = await Task<ObjectListing>.Factory.FromAsync(client.BeginListObjects, client.EndListObjects, listObjectsRequest, null);
+
                     if (result.HttpStatusCode != HttpStatusCode.OK)
                     {
                         throw new Exception(result.HttpStatusCode.ToString());
                     }
+                }
+                catch (OssException ex)
+                {
+                    Logging.Log.WriteErrorMessage(LOGTAG, "List", ex, "List object failed. {0}, {1}", ex.Message, ex.ErrorCode);
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    Logging.Log.WriteErrorMessage(LOGTAG, "List", ex, "List object failed. {0}", ex.Message);
+                    throw;
+                }
 
-                    foreach (var summary in result.ObjectSummaries)
-                    {
-                        list.Add(summary);
-                    }
+                foreach (var item in result.ObjectSummaries)
+                {
+                    var fileName = Path.GetFileName(item.Key);
+                    var time = item.LastModified; // DateTimeOffset.Parse(item.LastModified).ToLocalTime().DateTime;
+                    yield return new FileEntry(fileName, item.Size, time, time);
+                }
 
-                    nextMarker = result.NextMarker;
-                    isTruncated = result.IsTruncated;
-                } while (isTruncated);
-            }
-            catch (OssException ex)
-            {
-                Logging.Log.WriteErrorMessage(LOGTAG, "List", ex, "List object failed. {0}, {1}", ex.Message, ex.ErrorCode);
-                throw;
-            }
-            catch (Exception ex)
-            {
-                Logging.Log.WriteErrorMessage(LOGTAG, "List", ex, "List object failed. {0}", ex.Message);
-                throw;
-            }
-
-            foreach (var item in list)
-            {
-                var fileName = Path.GetFileName(item.Key);
-                var time = item.LastModified; // DateTimeOffset.Parse(item.LastModified).ToLocalTime().DateTime;
-                yield return new FileEntry(fileName, item.Size, time, time);
-            }
+                nextMarker = result.NextMarker;
+                isTruncated = result.IsTruncated;
+            } while (isTruncated);
         }
 
-        public async Task PutAsync(string remotename, string filename, CancellationToken cancelToken)
-        {
-            using (FileStream fs = File.Open(filename, FileMode.Open, FileAccess.Read, FileShare.Read))
-                await PutAsync(remotename, fs, cancelToken);
-        }
-
-        public void Get(string remotename, string filename)
-        {
-            using (var fs = File.Open(filename, FileMode.Create, FileAccess.Write, FileShare.None))
-                Get(remotename, fs);
-        }
-
-        public void Delete(string remotename)
+        public Task DeleteAsync(string remotename, CancellationToken cancelToken)
         {
             try
             {
@@ -172,23 +160,26 @@ namespace Duplicati.Library.Backend.AliyunOSS
                 Logging.Log.WriteErrorMessage(LOGTAG, "Delete", ex, "Delete object failed. {0}", ex.Message);
                 throw;
             }
+            return Task.CompletedTask;
         }
 
-        public void Test()
+        public Task TestAsync(CancellationToken cancelToken)
         {
             GetClient();
+            return Task.CompletedTask;
         }
 
-        public void CreateFolder()
+        public Task CreateFolderAsync(CancellationToken cancelToken)
         {
             // No need to create folders
+            return Task.CompletedTask;
         }
 
         public void Dispose()
         {
         }
 
-        public Task PutAsync(string remotename, Stream stream, CancellationToken cancelToken)
+        public async Task PutAsync(string remotename, Stream stream, CancellationToken cancelToken)
         {
             var bucketName = _ossOptions.BucketName;
 
@@ -197,7 +188,7 @@ namespace Duplicati.Library.Backend.AliyunOSS
             var client = GetClient();
             try
             {
-                var objectResult = client.PutObject(bucketName, objectName, stream);
+                var objectResult = await Task<PutObjectResult>.Factory.FromAsync(client.BeginPutObject, client.EndPutObject, bucketName, objectName, stream, null);
                 if (objectResult?.HttpStatusCode != HttpStatusCode.OK)
                 {
                     throw new Exception("Put object failed");
@@ -207,11 +198,9 @@ namespace Duplicati.Library.Backend.AliyunOSS
             {
                 throw new Exception($"Put object failed, {ex.Message}");
             }
-
-            return Task.CompletedTask;
         }
 
-        public void Get(string remotename, Stream stream)
+        public async Task GetAsync(string remotename, Stream destination, CancellationToken cancelToken)
         {
             var bucketName = _ossOptions.BucketName;
 
@@ -221,13 +210,13 @@ namespace Duplicati.Library.Backend.AliyunOSS
 
             try
             {
-                var obj = client.GetObject(bucketName, objectName);
+                var obj = await Task<OssObject>.Factory.FromAsync(client.BeginGetObject, client.EndGetObject, bucketName, objectName, null);                
                 if (obj.HttpStatusCode != HttpStatusCode.OK)
                     throw new Exception("Get failed");
 
                 using (var requestStream = obj.Content)
                 {
-                    requestStream.CopyTo(stream);
+                    requestStream.CopyTo(destination);
                 }
             }
             catch (Exception ex)
@@ -237,7 +226,7 @@ namespace Duplicati.Library.Backend.AliyunOSS
             }
         }
 
-        public void Rename(string oldname, string newname)
+        public async Task RenameAsync(string oldname, string newname, CancellationToken cancelToken)
         {
             var bucketName = _ossOptions.BucketName;
 
@@ -255,14 +244,14 @@ namespace Duplicati.Library.Backend.AliyunOSS
             {
                 // copy file
                 var req = new CopyObjectRequest(sourceBucket, sourceObject, targetBucket, targetObject);
-                var res = client.CopyObject(req);
+                var res = await Task<CopyObjectResult>.Factory.FromAsync(client.BeginCopyObject, client.EndCopyResult, req, null);
                 if (res?.HttpStatusCode != HttpStatusCode.OK)
                 {
                     throw new Exception("file rename failed");
                 }
 
                 // del old file
-                Delete(oldname);
+                await DeleteAsync(oldname, cancelToken).ConfigureAwait(false);
             }
             catch (OssException ex)
             {
@@ -297,5 +286,7 @@ namespace Duplicati.Library.Backend.AliyunOSS
         }
 
         public string[] DNSName => null;
+
+        public bool SupportsStreaming => true;
     }
 }

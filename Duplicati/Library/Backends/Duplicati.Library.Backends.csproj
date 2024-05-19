@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>    
     <Description>Central reference to all backends</Description>
@@ -29,6 +29,6 @@
 	<ProjectReference Include="..\Backend\TahoeLAFS\Duplicati.Library.Backend.TahoeLAFS.csproj" />
 	<ProjectReference Include="..\Backend\TencentCOS\Duplicati.Library.Backend.TencentCOS.csproj" />
 	<ProjectReference Include="..\Backend\WEBDAV\Duplicati.Library.Backend.WEBDAV.csproj" />
-	<!--<ProjectReference Include="..\Backend\AliyunOSS\Duplicati.Library.Backend.AliyunOSS.csproj" />-->
+	<ProjectReference Include="..\Backend\AliyunOSS\Duplicati.Library.Backend.AliyunOSS.csproj" />
 	</ItemGroup>
 </Project>

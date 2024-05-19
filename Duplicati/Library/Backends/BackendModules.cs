@@ -38,7 +38,7 @@ public static class BackendModules
     /// Calculate list once and cache it
     /// </summary>
     private static readonly IReadOnlyList<IBackend> SupportedBackends = new IBackend[] {
-        //new Backend.AliyunOSS.OSS(),
+        new Backend.AliyunOSS.OSS(),
         new Backend.AlternativeFTP.AlternativeFtpBackend(),
         new Backend.AzureBlob.AzureBlobBackend(),
         new Backend.Backblaze.B2(),
