@@ -16,9 +16,12 @@ namespace Duplicati.Library.Utility
         /// <param name="cookies">Collection of cookies which should be added</param>
         public static void AddCookies(HttpRequestMessage request, CookieCollection cookies)
         {
-            CookieContainer container = new CookieContainer();
-            container.Add(request.RequestUri, cookies);
-            request.Headers.Add("Cookie", container.GetCookieHeader(request.RequestUri));
+            if (cookies.Count > 0)
+            {
+                CookieContainer container = new CookieContainer();
+                container.Add(request.RequestUri, cookies);
+                request.Headers.Add("Cookie", container.GetCookieHeader(request.RequestUri));
+            }
         }
 
         /// <summary>
