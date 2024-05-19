@@ -39,7 +39,7 @@ using Uri = System.Uri;
 namespace Duplicati.Library.Backend.AlternativeFTP
 {
     // ReSharper disable once RedundantExtendsListEntry
-    public class AlternativeFtpBackend : IBackend
+    public class AlternativeFtpBackend : IBackend, IBackendPagination
     {
         private System.Net.NetworkCredential _userInfo;
         private const string OPTION_ACCEPT_SPECIFIED_CERTIFICATE = "accept-specified-ssl-hash"; // Global option
@@ -73,7 +73,6 @@ namespace Duplicati.Library.Backend.AlternativeFTP
 
         private readonly bool _logToConsole = false;
         private readonly bool _logPrivateInfoToConsole = false;
-        private readonly byte[] _copybuffer = new byte[CoreUtility.DEFAULT_BUFFER_SIZE];
         private readonly bool _accepAllCertificates;
         private readonly string[] _validHashes;
 
@@ -236,21 +235,18 @@ namespace Duplicati.Library.Backend.AlternativeFTP
         }
 
         public Task<IList<IFileEntry>> ListAsync(CancellationToken cancelToken)
-            => ListAsync("", cancelToken);
+            => this.CondensePaginatedListAsync(cancelToken);
 
-        public Task<IList<IFileEntry>> ListAsync(string filename, CancellationToken cancelToken)
-            => ListAsync(filename, false, cancelToken);
-
-        private async Task<IList<IFileEntry>> ListAsync(string filename, bool stripFile, CancellationToken cancelToken)
+        public async IAsyncEnumerable<IFileEntry> ListEnumerableAsync([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancelToken)
         {
-            var list = new List<IFileEntry>();
-            string remotePath = filename;
+            string filename = "";
+            bool stripFile = false;
 
             var ftpClient = CreateClient();
 
             // Get the remote path
             var url = new Uri(this._url);
-            remotePath = "/" + this.GetUnescapedAbsolutePath(url);
+            string remotePath = "/" + this.GetUnescapedAbsolutePath(url);
 
             if (!string.IsNullOrEmpty(filename))
             {
@@ -265,30 +261,48 @@ namespace Duplicati.Library.Backend.AlternativeFTP
                 }
                 // else: stripping the filename in this case ignoring it
             }
-            
-            try
-            {
-                await foreach (var item in ftpClient.GetListingEnumerable(remotePath, FtpListOption.Modify | FtpListOption.Size, cancelToken))
-                {
-                    switch (item.Type)
-                    {
-                        case FtpObjectType.Directory:
-                            {
-                                if (item.Name == "." || item.Name == "..")
-                                {
-                                    continue;
-                                }
 
-                            list.Add(new FileEntry(item.Name, -1, new DateTime(), item.Modified)
+            // Have to do this to avoid yield return in try block
+            // Equivalent to await foreach
+            await using var enumerator = ftpClient.GetListingEnumerable(remotePath, FtpListOption.Modify | FtpListOption.Size, cancelToken).GetAsyncEnumerator(cancelToken);
+            while (true)
+            {
+                FtpListItem item;
+                try
+                {
+                    if (!await enumerator.MoveNextAsync())
+                        break;
+                    item = enumerator.Current;
+                }
+                catch (FtpCommandException ex)
+                {
+                    //         Message    "Directory not found."    string
+                    if (ex.Message == "Directory not found.")
+                    {
+                        throw new FolderMissingException(Strings.MissingFolderError(remotePath, ex.Message), ex);
+                    }
+
+                    throw;
+                }
+                switch (item.Type)
+                {
+                    case FtpObjectType.Directory:
+                        {
+                            if (item.Name == "." || item.Name == "..")
+                            {
+                                continue;
+                            }
+
+                            yield return new FileEntry(item.Name, -1, new DateTime(), item.Modified)
                             {
                                 IsFolder = true,
-                            });
+                            };
 
                             break;
                         }
                     case FtpObjectType.File:
                         {
-                            list.Add(new FileEntry(item.Name, item.Size, new DateTime(), item.Modified));
+                            yield return new FileEntry(item.Name, item.Size, new DateTime(), item.Modified);
 
                             break;
                         }
@@ -310,17 +324,16 @@ namespace Duplicati.Library.Backend.AlternativeFTP
                                                 continue;
                                             }
 
-                                            list.Add(new FileEntry(item.Name, -1, new DateTime(), item.Modified)
+                                            yield return new FileEntry(item.Name, -1, new DateTime(), item.Modified)
                                             {
                                                 IsFolder = true,
-                                            });
+                                            };
 
                                             break;
                                         }
                                     case FtpObjectType.File:
                                         {
-                                            list.Add(new FileEntry(item.Name, item.Size, new DateTime(), item.Modified));
-
+                                            yield return new FileEntry(item.Name, item.Size, new DateTime(), item.Modified);
                                             break;
                                         }
                                 }
@@ -328,20 +341,7 @@ namespace Duplicati.Library.Backend.AlternativeFTP
                             break;
                         }
 
-                    }
                 }
-
-                return list;
-            }
-            catch (FtpCommandException ex)
-            {
-                //         Message    "Directory not found."    string
-                if (ex.Message == "Directory not found.")
-                {
-                    throw new FolderMissingException(Strings.MissingFolderError(remotePath, ex.Message), ex);
-                }
-
-                throw;
             }
 
         }
@@ -414,21 +414,19 @@ namespace Duplicati.Library.Backend.AlternativeFTP
 
             try
             {
-                using (var inputStream = await ftpClient.OpenRead(remotePath, token: cancelToken))
+                if (!await ftpClient.DownloadStream(output, remotePath, token: cancelToken))
                 {
-                    try
-                    {
-                        await CoreUtility.CopyStreamAsync(inputStream, output, false, cancelToken, _copybuffer);
-                    }
-                    finally
-                    {
-                        inputStream.Close();
-                    }
+                    throw new Exception("Download failed");
                 }
+
             }
-            catch(FtpCommandException ex)
+            catch (FtpMissingObjectException ex)
             {
-                if(ex.CompletionCode == "550")
+                throw new FileMissingException(ex);
+            }
+            catch (FtpCommandException ex)
+            {
+                if (ex.CompletionCode == "550")
                 {
                     throw new FileMissingException(ex);
                 }
@@ -493,7 +491,7 @@ namespace Duplicati.Library.Backend.AlternativeFTP
                 }
                 catch (Exception e)
                 {
-                    if (e.InnerException != null) { e =  e.InnerException; }
+                    if (e.InnerException != null) { e = e.InnerException; }
                     throw new Exception(string.Format(Strings.ErrorDeleteFile, e.Message), e);
                 }
             }
