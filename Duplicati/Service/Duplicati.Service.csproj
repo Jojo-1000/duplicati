@@ -1,12 +1,10 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
-    <Copyright>LGPL, Copyright © Duplicati Team 2021</Copyright>
+    <TargetFramework>net8.0</TargetFramework>
     <AssemblyName>Duplicati.Service.Implementation</AssemblyName>
   </PropertyGroup>
-  
-  <ItemGroup>	
+  <ItemGroup>
     <ProjectReference Include="..\Library\Utility\Duplicati.Library.Utility.csproj" />
     <ProjectReference Include="..\Server\Duplicati.Server.csproj" />
   </ItemGroup>

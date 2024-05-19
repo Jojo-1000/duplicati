@@ -1,14 +1,25 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>    
-    <Copyright>LGPL, Copyright © Duplicati Team 2021</Copyright>
-    <Description>A license text reader for Duplicati</Description>
+    <TargetFramework>net8.0</TargetFramework>
+    <OutputType>Library</OutputType>
   </PropertyGroup>
   
   <ItemGroup>
     <Content Include="..\..\thirdparty\alphavss\Homepage.txt">
       <Link>licenses\alphavss\Homepage.txt</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\..\thirdparty\alphavss\License.txt">
+      <Link>licenses\alphavss\License.txt</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\..\thirdparty\FluentFTP\Homepage.txt">
+      <Link>licenses\FluentFTP\Homepage.txt</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\..\thirdparty\FluentFTP\License.txt">
+      <Link>licenses\FluentFTP\License.txt</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Include="..\..\thirdparty\gpg\Homepage.txt">
@@ -83,6 +94,10 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Link>licenses\SSH.NET\License.txt</Link>
     </Content>
+    <Content Include="..\..\thirdparty\SSH.NET\licensedata.json">
+      <Link>licenses\SSH.NET\licensedata.json</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
     <Content Include="..\..\thirdparty\Json.NET\Homepage.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Link>licenses\Json.NET\Homepage.txt</Link>
@@ -139,25 +154,17 @@
       <Link>licenses\ManagedLZMA\license.txt</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="..\..\thirdparty\MonoMac\licensedata.json">
-      <Link>licenses\MonoMac\licensedata.json</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="..\..\thirdparty\MonoMac\download.txt">
-      <Link>licenses\MonoMac\download.txt</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="..\..\thirdparty\MonoMac\license.txt">
-      <Link>licenses\MonoMac\license.txt</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
     <Content Include="..\..\thirdparty\SQLite\licensedata.json">
       <Link>licenses\SQLite\licensedata.json</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="..\..\thirdparty\SSH.NET\licensedata.json">
-      <Link>licenses\SSH.NET\licensedata.json</Link>
+    <Content Include="..\..\thirdparty\SshNet.Security.Cryptography\Homepage.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>licenses\SshNet.Security.Cryptography\Homepage.txt</Link>
+    </Content>
+    <Content Include="..\..\thirdparty\SshNet.Security.Cryptography\License.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>licenses\SshNet.Security.Cryptography\License.txt</Link>
     </Content>
     <Content Include="..\..\changelog.txt">
       <Link>changelog.txt</Link>
@@ -190,16 +197,28 @@
     <Content Include="acknowledgements.txt">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="..\..\thirdparty\agsXMPP\download.txt">
-      <Link>licenses\agsXMPP\download.txt</Link>
+    <Content Include="..\..\thirdparty\Sharp.Xmpp\download.txt">
+      <Link>licenses\Sharp.Xmpp\download.txt</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="..\..\thirdparty\agsXMPP\license.txt">
-      <Link>licenses\agsXMPP\license.txt</Link>
+    <Content Include="..\..\thirdparty\Sharp.Xmpp\license.txt">
+      <Link>licenses\Sharp.Xmpp\license.txt</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="..\..\thirdparty\agsXMPP\licensedata.json">
-      <Link>licenses\agsXMPP\licensedata.json</Link>
+    <Content Include="..\..\thirdparty\Sharp.Xmpp\licensedata.json">
+      <Link>licenses\Sharp.Xmpp\licensedata.json</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\..\thirdparty\ARSoft.Tools.Net\download.txt">
+      <Link>licenses\ARSoft.Tools.Net\download.txt</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\..\thirdparty\ARSoft.Tools.Net\license.txt">
+      <Link>licenses\ARSoft.Tools.Net\license.txt</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\..\thirdparty\ARSoft.Tools.Net\licensedata.json">
+      <Link>licenses\ARSoft.Tools.Net\licensedata.json</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Include="..\..\thirdparty\SharpAESCrypt\download.txt">
@@ -260,18 +279,6 @@
     </Content>
     <Content Include="..\..\thirdparty\CoCoL\licensedata.json">
       <Link>licenses\CoCoL\licensedata.json</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="..\..\thirdparty\rumps\download.txt">
-      <Link>licenses\rumps\download.txt</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="..\..\thirdparty\rumps\License.txt">
-      <Link>licenses\rumps\License.txt</Link>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="..\..\thirdparty\rumps\licensedata.json">
-      <Link>licenses\rumps\licensedata.json</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Include="..\..\thirdparty\FluentFTP\Homepage.txt">
@@ -343,17 +350,8 @@
   <ItemGroup>
     <EmbeddedResource Include="VersionTag.txt" />
   </ItemGroup>
-    
   <ItemGroup>
     <ProjectReference Include="..\Library\Common\Duplicati.Library.Common.csproj" />
     <ProjectReference Include="..\Library\Utility\Duplicati.Library.Utility.csproj" />
   </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="Microsoft.DotNet.Analyzers.Compatibility" Version="0.2.12-alpha">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
-  </ItemGroup>
-
 </Project>

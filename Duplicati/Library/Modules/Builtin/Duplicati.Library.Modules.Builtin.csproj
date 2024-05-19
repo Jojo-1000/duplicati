@@ -1,18 +1,18 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>    
-    <Copyright>LGPL, Copyright © Duplicati Team 2021</Copyright>
-    <Description>Buildin modules for Duplicati</Description>
+    <TargetFramework>net8.0</TargetFramework>
+    <OutputType>Library</OutputType>
+    <RootNamespace>Duplicati.Library.Modules.Builtin</RootNamespace>
   </PropertyGroup>
   
   <ItemGroup>
     <PackageReference Include="DnsClient" Version="1.4.0" />
-    <PackageReference Include="Matrix.vNext" Version="2.2.1" />
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.2" />
+    <PackageReference Include="ARSoft.Tools.Net" Version="1.8.1" />
+    <PackageReference Include="Sharp.Xmpp" Version="1.0.2.2" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="MailKit" Version="2.4.1" />
     <PackageReference Include="MimeKit" Version="2.4.1" />
-    <PackageReference Include="Portable.BouncyCastle" Version="1.8.5.2" />
   </ItemGroup>
   
   <ItemGroup>

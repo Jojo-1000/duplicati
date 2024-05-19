@@ -1,13 +1,11 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>    
-    <Copyright>LGPL, Copyright © Duplicati Team 2021</Copyright>
-    <Description>A disk snapshot implementation for Duplicati</Description>
+    <TargetFramework>net8.0</TargetFramework>
   </PropertyGroup>
   
   <ItemGroup>
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.2" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
   </ItemGroup>
   
   <ItemGroup>
@@ -19,12 +17,6 @@
     <ProjectReference Include="..\Utility\Duplicati.Library.Utility.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Reference Include="UnixSupport">
-      <HintPath>..\..\..\thirdparty\UnixSupport\UnixSupport.dll</HintPath>
-    </Reference>
-  </ItemGroup>
-  
   <ItemGroup>
     <Content Include="lvm-scripts\create-lvm-snapshot.sh">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

@@ -1,14 +1,12 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>    
-    <Copyright>LGPL, Copyright © Duplicati Team 2021</Copyright>
-    <Description>Usage reporter for Duplicati</Description>
+    <TargetFramework>net8.0</TargetFramework>
+    <OutputType>Library</OutputType>
   </PropertyGroup>
-  
   <ItemGroup>
     <PackageReference Include="CoCoL" Version="1.7.1" />
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.2" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
   </ItemGroup>
 
   <ItemGroup>

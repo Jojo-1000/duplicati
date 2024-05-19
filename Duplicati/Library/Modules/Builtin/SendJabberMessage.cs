@@ -1,10 +1,31 @@
-﻿using System;
+// Copyright (C) 2024, The Duplicati Team
+// https://duplicati.com, hello@duplicati.com
+// 
+// Permission is hereby granted, free of charge, to any person obtaining a 
+// copy of this software and associated documentation files (the "Software"), 
+// to deal in the Software without restriction, including without limitation 
+// the rights to use, copy, modify, merge, publish, distribute, sublicense, 
+// and/or sell copies of the Software, and to permit persons to whom the 
+// Software is furnished to do so, subject to the following conditions:
+// 
+// The above copyright notice and this permission notice shall be included in 
+// all copies or substantial portions of the Software.
+// 
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS 
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER 
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING 
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
+// DEALINGS IN THE SOFTWARE.
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Duplicati.Library.Interface;
-using Matrix;
-using Matrix.Xmpp.Client;
-using Enum = System.Enum;
+using Duplicati.Library.Logging;
+using System.Net.NetworkInformation;
+using Duplicati.Library.Modules.Builtin.ResultSerialization;
+using Sharp.Xmpp.Client;
 
 namespace Duplicati.Library.Modules.Builtin
 {
@@ -64,7 +85,7 @@ namespace Duplicati.Library.Modules.Builtin
         /// <summary>
         /// The default message body
         /// </summary>
-        protected override string DEFAULT_BODY => string.Format("Duplicati %OPERATIONNAME% report for %backup-name%{0}{0}%RESULT%", Environment.NewLine);
+        protected override string DEFAULT_BODY => string.Format("Duplicati %OPERATIONNAME% report for %backup-name%{0}{0} %RESULT%", Environment.NewLine);
         /// <summary>
         /// Don't use the subject for XMPP
         /// </summary>
@@ -164,70 +185,51 @@ namespace Duplicati.Library.Modules.Builtin
 
         #endregion
 
-        protected override string ReplaceTemplate(string input, object result, bool subjectline)
+        protected override string ReplaceTemplate(string input, object result, Exception exception, bool subjectline)
         {
             // No need to do the expansion as we throw away the result
             if (subjectline)
                 return string.Empty;
-            return base.ReplaceTemplate(input, result, subjectline);
+            return base.ReplaceTemplate(input, result, exception, subjectline);
         }
 
         protected override async void SendMessage(string subject, string body)
         {
-            Exception ex = null;
-            var waitEvent = new System.Threading.ManualResetEvent(false);
 
             var uri = new Library.Utility.Uri(m_username.Contains("://") ? m_username : "http://" + m_username);
-
             var resource = uri.Path ?? "";
             if (resource.StartsWith("/", StringComparison.Ordinal))
                 resource = resource.Substring(1);
-            
-            var xmppClient = new XmppClient
-            {
-                Username = uri.Username,
-                Password = string.IsNullOrWhiteSpace(m_password) ? uri.Password : m_password,
-                XmppDomain = uri.Host,
-                Port = uri.Port == -1 ? (uri.Scheme == "https" ? 5223 : 5222) : uri.Port,
-                Tls = uri.Scheme == "https",
-                Resource = string.IsNullOrWhiteSpace(resource) ? "Duplicati" : resource,
-                HostnameResolver = new Matrix.Network.Resolver.NameResolver()
-            };
 
-            // connect so the server
-            await xmppClient.ConnectAsync();
-
-            try
+            if (string.IsNullOrWhiteSpace(resource))
+                resource = "Duplicati";
+            using (XmppClient client = new XmppClient(uri.Host, uri.Username, string.IsNullOrWhiteSpace(m_password) ? uri.Password : m_password,  uri.Port == -1 ? (uri.Scheme == "https" ? 5223 :5222) : uri.Port))
             {
-                foreach (var recipient in m_to.Split(new[] {","}, StringSplitOptions.RemoveEmptyEntries))
-                    await xmppClient.SendAsync(new Message(recipient, body, subject));
-            }
-            catch (Exception e)
-            {
-                Logging.Log.WriteWarningMessage(LOGTAG, "XMPPSendError", e, "Failed to send to XMPP messages: {0}", e.Message);
-                ex = e;
-            }
-            finally
-            {
-                waitEvent.Set();
-            }
-
-            var timeout = !waitEvent.WaitOne(TimeSpan.FromSeconds(30), true);
-
-            try
-            {
-                // Close connection again
-                await xmppClient.DisconnectAsync();
-            }
-            catch (Exception lex)
-            {
-                Logging.Log.WriteExplicitMessage(LOGTAG, "CloseConnectionError", lex, "Failed to close XMPP connection: {0}", lex.Message);
+                client.Connect(resource);
+                try
+                {
+                    foreach(var recipient in m_to.Split(new string[] { "," }, StringSplitOptions.RemoveEmptyEntries))
+                    {
+		        client.SendMessage(recipient, new Dictionary<string, string>(){ {"en", body} });
+                        // hack to work around a failure to send the second time
+                        // (the xmpp server reports a read failure)
+			try 
+			{
+			    client.Ping(recipient);
+			}
+			catch {}
+                    }
+		}
+                catch (Exception e)
+                {
+                    Logging.Log.WriteWarningMessage(LOGTAG, "XMPPSendError", e, "Failed to send to XMPP messages: {0}", e.Message);
+                }
+		finally 
+		{
+                    client.Close();
+		}
             }
 
-            if (ex != null)
-                throw ex;
-            if (timeout)
-                throw new TimeoutException(Strings.SendJabberMessage.LoginTimeoutError);
         }
     }
 }

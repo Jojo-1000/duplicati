@@ -1,16 +1,16 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>    
-    <Copyright>LGPL, Copyright © Duplicati Team 2021</Copyright>
-    <Description>Compression implementation for Duplicati</Description>
+    <TargetFramework>net8.0</TargetFramework>
+    <OutputType>Library</OutputType>
+    <RootNamespace>Duplicati.Library.Compression</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="sharpcompress" Version="0.24.0" />
+    <PackageReference Include="sharpcompress" Version="0.36.0" />
   </ItemGroup>
 
-  <ItemGroup Condition=" '$(TargetFramework)' != 'netstandard2.1' ">
+  <ItemGroup>
     <Reference Include="managed-lzma">
       <HintPath>..\..\..\thirdparty\ManagedLZMA\managed-lzma.dll</HintPath>
     </Reference>
@@ -29,5 +29,4 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
   </ItemGroup>
-
 </Project>

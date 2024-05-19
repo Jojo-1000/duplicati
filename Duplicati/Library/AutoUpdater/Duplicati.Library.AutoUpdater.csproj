@@ -1,13 +1,11 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
-    <Copyright>LGPL, Copyright © Duplicati Team 2021</Copyright>
-    <Description>AutoUpdater library for Duplicati</Description>
+    <TargetFramework>net8.0</TargetFramework>
   </PropertyGroup>
   
   <ItemGroup>
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.2" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
   </ItemGroup>
 
   <ItemGroup>
@@ -19,10 +17,10 @@
   
   <ItemGroup>
     <EmbeddedResource Include="AutoUpdateAppName.txt" />
-    <EmbeddedResource Include="AutoUpdateSignKey.txt" />
+    <EmbeddedResource Include="AutoUpdateSignKeys.txt" />
     <EmbeddedResource Include="AutoUpdateURL.txt" />
-    <EmbeddedResource Include="AutoUpdateFolderReadme.txt" />
     <EmbeddedResource Include="AutoUpdateInstallIDTemplate.txt" />
+    <EmbeddedResource Include="AutoUpdateMachineIDTemplate.txt" />
     <EmbeddedResource Include="AutoUpdateBuildChannel.txt" />
   </ItemGroup>
 

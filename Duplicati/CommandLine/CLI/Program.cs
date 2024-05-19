@@ -1,29 +1,31 @@
-﻿#region Disclaimer / License
-// Copyright (C) 2015, The Duplicati Team
-// http://www.duplicati.com, info@duplicati.com
-//
-// This library is free software; you can redistribute it and/or
-// modify it under the terms of the GNU Lesser General Public
-// License as published by the Free Software Foundation; either
-// version 2.1 of the License, or (at your option) any later version.
-//
-// This library is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-// Lesser General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public
-// License along with this library; if not, write to the Free Software
-// Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
-//
-#endregion
+// Copyright (C) 2024, The Duplicati Team
+// https://duplicati.com, hello@duplicati.com
+// 
+// Permission is hereby granted, free of charge, to any person obtaining a 
+// copy of this software and associated documentation files (the "Software"), 
+// to deal in the Software without restriction, including without limitation 
+// the rights to use, copy, modify, merge, publish, distribute, sublicense, 
+// and/or sell copies of the Software, and to permit persons to whom the 
+// Software is furnished to do so, subject to the following conditions:
+// 
+// The above copyright notice and this permission notice shall be included in 
+// all copies or substantial portions of the Software.
+// 
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS 
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER 
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING 
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
+// DEALINGS IN THE SOFTWARE.
+
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using Duplicati.Library.Localization.Short;
 using System.IO;
 using Duplicati.Library.Interface;
-using Duplicati.Library.Logging;
+using Duplicati.Library.AutoUpdater;
 
 namespace Duplicati.CommandLine
 {
@@ -37,12 +39,6 @@ namespace Duplicati.CommandLine
         /// The main entry point for the application.
         /// </summary>
         public static int Main(string[] args)
-        {
-            Duplicati.Library.AutoUpdater.UpdaterManager.IgnoreWebrootFolder = true;
-            return Duplicati.Library.AutoUpdater.UpdaterManager.RunFromMostRecent(typeof(Program).GetMethod("RealMain"), args);
-        }
-
-        public static int RealMain(string[] args)
         {
             Library.UsageReporter.Reporter.Initialize();
             FROM_COMMANDLINE = true;
@@ -98,7 +94,7 @@ namespace Duplicati.CommandLine
 
         private static int ShowChangeLog(TextWriter outwriter)
         {
-            var path = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location), "changelog.txt");
+            var path = System.IO.Path.Combine(UpdaterManager.INSTALLATIONDIR, "changelog.txt");
             outwriter.WriteLine(System.IO.File.ReadAllText(path));
             return 0;
         }
@@ -111,18 +107,28 @@ namespace Duplicati.CommandLine
 
             if (update != null && update.Version != Library.AutoUpdater.UpdaterManager.SelfVersion.Version)
             {
-                outwriter.WriteLine("Found update \"{0}\", downloading ...", update.Displayname);
-                long lastpg = 0;
-                Library.AutoUpdater.UpdaterManager.DownloadAndUnpackUpdate(update, f =>
+                var package = update.FindPackage();
+                if (package == null)
                 {
-                    var npg = (long)(f * 100);
-                    if (Math.Abs(npg - lastpg) >= 5 || (npg == 100 && lastpg != 100))
+                    outwriter.WriteLine($"Failed to locate a matching package for this machine, please visit this link and select the correct package: {update.GetGenericUpdatePageUrl()}");
+                }
+                else
+                {
+                    var filename = Path.GetFullPath(package.GetFilename());
+                    outwriter.WriteLine("Downloading update \"{0}\" to {1} ...", update.Displayname, filename);
+
+                    long lastpg = 0;
+                    Library.AutoUpdater.UpdaterManager.DownloadUpdate(update, package, filename, f =>
                     {
-                        lastpg = npg;
-                        outwriter.WriteLine("Downloading {0}% ...", npg);
-                    }
-                });
-                outwriter.WriteLine("Update \"{0}\" ({1}) installed, using on next launch", update.Displayname, update.Version);
+                        var npg = (long)(f * 100);
+                        if (Math.Abs(npg - lastpg) >= 5 || (npg == 100 && lastpg != 100))
+                        {
+                            lastpg = npg;
+                            outwriter.WriteLine("Downloading {0}% ...", npg);
+                        }
+                    });
+                    outwriter.WriteLine("Update \"{0}\" ({1}) downloaded", update.Displayname, update.Version);
+                }
             }
         }
 

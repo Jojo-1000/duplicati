@@ -1,13 +1,6 @@
 name: Tests
 
-on:
-  push:
-    branches: "experiment/net5-split"
-  pull_request:
-    branches: "experiment/net5-split"
-
-env:
-  build_directory: "Duplicati/GUI/Duplicati.GUI.TrayIcon/bin/Release"
+on: [push, pull_request]
 
 jobs:
   unit_tests:
@@ -16,73 +9,29 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ ubuntu-latest, windows-latest, macos-latest ]
+        os: [ubuntu-latest, windows-latest, macos-latest]
 
     steps:
-    - name: Set up .NET
-      uses: actions/setup-dotnet@v1.8.0
-      with:
-        dotnet-version: 5.0.x
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.x
 
-    - name: Checkout source
-      uses: actions/checkout@v2.3.4
+      - name: Checkout source
+        uses: actions/checkout@v4
 
-    - name: Restore NuGet dependencies
-      run: dotnet restore Duplicati.sln
+      - name: Restore NuGet dependencies
+        run: dotnet restore Duplicati.sln
 
-    - name: Build Duplicati
-      run: dotnet build --no-restore Duplicati.sln
+      - name: Build Duplicati
+        run: dotnet build --no-restore Duplicati.sln
 
-    - name: Run unit tests
-      run: dotnet test --no-build --verbosity minimal Duplicati.sln
+      - name: Run unit tests
+        run: dotnet test --no-build --verbosity minimal Duplicati.sln
 
-    - name: Run Unit Tests (Windows)
-      if: matrix.os == 'windows-latest'
-      run: |
-        nuget install NUnit.Runners -Version 3.12.0 -OutputDirectory nunit
-        nunit/NUnit.ConsoleRunner.3.12.0/tools/nunit3-console.exe Duplicati/UnitTest/bin/Release/Duplicati.UnitTest.dll
-
-  ui_tests:
-    name: UI tests
+  selenium:
     runs-on: ubuntu-latest
-
-    # Some of these steps duplicate those in the unit_tests job above.  This
-    # can be cleaned up using a composite run steps action once it supports
-    # what we need (https://github.com/actions/runner/issues/646).
     steps:
-    - name: Set up .NET
-      uses: actions/setup-dotnet@v1.8.0
-      with:
-        dotnet-version: 5.0.x
-
-    - name: Install Additional Dependencies
-      run: sudo apt-get install gtk-sharp2
-
-    - name: Build Duplicati
-      run: msbuild -p:Configuration=Release -p:DefineConstants=ENABLE_GTK Duplicati.sln
-
-    - name: Set up Python
-      uses: actions/setup-python@v2
-      with:
-        python-version: 3.x
-
-    - name: Install dependencies
-      run: |
-        pip3 install selenium
-        pip3 install --upgrade urllib3
-        pip3 install chromedriver-autoinstaller
-
-    - name: Checkout source
-      uses: actions/checkout@v2.3.4
-
-    - name: Restore NuGet dependencies
-      run: dotnet restore Duplicati.sln
-
-    - name: Build Duplicati
-      run: dotnet build --no-restore -p:DefineConstants=ENABLE_GTK Duplicati.sln
-
-    - name: Run UI tests
-      run: |
-        ./Executables/net5/Duplicati.Server/bin/Debug/net5.0/Duplicati.Server &
-        sleep 30
-        python3 guiTests/guiTest.py --use-chrome
+      - uses: actions/checkout@v4
+      - name: Selenium
+        run: pipeline/selenium/test.sh

@@ -1,16 +1,20 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>    
-    <Copyright>LGPL, Copyright © Duplicati Team 2021</Copyright>
-    <Description>Dynamic Loader for Duplicati</Description>
+    <TargetFramework>net8.0</TargetFramework>
+    <OutputType>Library</OutputType>
   </PropertyGroup>
 
-  <ItemGroup>
+  <ItemGroup>  
     <ProjectReference Include="..\Logging\Duplicati.Library.Logging.csproj" />
     <ProjectReference Include="..\Interface\Duplicati.Library.Interface.csproj" />
     <ProjectReference Include="..\Utility\Duplicati.Library.Utility.csproj" />
     <ProjectReference Include="..\Localization\Duplicati.Library.Localization.csproj" />
+    <ProjectReference Include="..\Compression\Duplicati.Library.Compression.csproj" />
+    <ProjectReference Include="..\Backends\Duplicati.Library.Backends.csproj" />
+    <ProjectReference Include="..\Encryption\Duplicati.Library.Encryption.csproj" />
+    <ProjectReference Include="..\Modules\Builtin\Duplicati.Library.Modules.Builtin.csproj" />
+    <ProjectReference Include="..\AutoUpdater\Duplicati.Library.AutoUpdater.csproj" />
   </ItemGroup>
 
   <ItemGroup>

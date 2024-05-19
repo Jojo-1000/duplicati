@@ -1,24 +1,24 @@
-﻿#region Disclaimer / License
+// Copyright (C) 2024, The Duplicati Team
+// https://duplicati.com, hello@duplicati.com
+// 
+// Permission is hereby granted, free of charge, to any person obtaining a 
+// copy of this software and associated documentation files (the "Software"), 
+// to deal in the Software without restriction, including without limitation 
+// the rights to use, copy, modify, merge, publish, distribute, sublicense, 
+// and/or sell copies of the Software, and to permit persons to whom the 
+// Software is furnished to do so, subject to the following conditions:
+// 
+// The above copyright notice and this permission notice shall be included in 
+// all copies or substantial portions of the Software.
+// 
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS 
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER 
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING 
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
+// DEALINGS IN THE SOFTWARE.
 
-// Copyright (C) 2015, The Duplicati Team
-// http://www.duplicati.com, info@duplicati.com
-// 
-// This library is free software; you can redistribute it and/or
-// modify it under the terms of the GNU Lesser General Public
-// License as published by the Free Software Foundation; either
-// version 2.1 of the License, or (at your option) any later version.
-// 
-// This library is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-// Lesser General Public License for more details.
-// 
-// You should have received a copy of the GNU Lesser General Public
-// License along with this library; if not, write to the Free Software
-// Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
-// 
-
-#endregion
 
 using Duplicati.Library.Common.IO;
 using Duplicati.Library.Interface;
@@ -60,30 +60,6 @@ namespace Duplicati.Library.Backend
 
         // TODO: A future release of SSH.NET will have async methods
         private SftpClient m_con;
-
-        private static readonly bool supportsECDSA;
-
-        static SSHv2()
-        {
-            // SSH.NET relies on the System.Security.Cryptography.ECDsaCng class for
-            // ECDSA algorithms, which is not implemented in Mono (as of 6.12.0.144).
-            // This prevents clients from connecting if one of the ECDSA algorithms is
-            // chosen as the host key algorithm.  In this case, we will prevent the
-            // client from advertising support for ECDSA algorithms.
-            //
-            // See https://github.com/mono/mono/blob/mono-6.12.0.144/mcs/class/referencesource/System.Core/System/Security/Cryptography/ECDsaCng.cs.
-
-            // TODO: Available in .NET 6
-            //try
-            //{
-            //ECDsaCng unused = new ECDsaCng();
-            //SSHv2.supportsECDSA = true;
-            //}
-            //catch
-            //{
-            SSHv2.supportsECDSA = false;
-            //}
-        }
 
         public SSHv2()
         {
@@ -304,7 +280,7 @@ namespace Duplicati.Library.Backend
                 // This probably leaves the operation running in the background if canceled, but a quick stop is probably desired
                 await Task.Delay(100, cancelToken);
             }
-            IEnumerable<SftpFile> files = m_con.EndListDirectory(ares);
+            IEnumerable<ISftpFile> files = m_con.EndListDirectory(ares);
             foreach (var ls in files)
             {
                 if (ls.Name.ToString() == "." || ls.Name.ToString() == "..") continue;
@@ -399,15 +375,6 @@ namespace Duplicati.Library.Backend
 
         private Task TryConnectAsync(SftpClient client, CancellationToken cancelToken)
         {
-            if (!SSHv2.supportsECDSA)
-            {
-                List<string> ecdsaKeys = client.ConnectionInfo.HostKeyAlgorithms.Keys.Where(x => x.StartsWith("ecdsa")).ToList();
-                foreach (string key in ecdsaKeys)
-                {
-                    client.ConnectionInfo.HostKeyAlgorithms.Remove(key);
-                }
-            }
-
             // TODO: Use ConnectAsync once available
             client.Connect();
             return Task.CompletedTask;

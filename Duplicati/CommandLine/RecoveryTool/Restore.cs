@@ -1,19 +1,24 @@
-﻿//  Copyright (C) 2015, The Duplicati Team
-//  http://www.duplicati.com, info@duplicati.com
-//
-//  This library is free software; you can redistribute it and/or modify
-//  it under the terms of the GNU Lesser General Public License as
-//  published by the Free Software Foundation; either version 2.1 of the
-//  License, or (at your option) any later version.
-//
-//  This library is distributed in the hope that it will be useful, but
-//  WITHOUT ANY WARRANTY; without even the implied warranty of
-//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
-//  Lesser General Public License for more details.
-//
-//  You should have received a copy of the GNU Lesser General Public
-//  License along with this library; if not, write to the Free Software
-//  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+// Copyright (C) 2024, The Duplicati Team
+// https://duplicati.com, hello@duplicati.com
+// 
+// Permission is hereby granted, free of charge, to any person obtaining a 
+// copy of this software and associated documentation files (the "Software"), 
+// to deal in the Software without restriction, including without limitation 
+// the rights to use, copy, modify, merge, publish, distribute, sublicense, 
+// and/or sell copies of the Software, and to permit persons to whom the 
+// Software is furnished to do so, subject to the following conditions:
+// 
+// The above copyright notice and this permission notice shall be included in 
+// all copies or substantial portions of the Software.
+// 
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS 
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER 
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING 
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
+// DEALINGS IN THE SOFTWARE.
+
 using System;
 using System.IO;
 using System.Linq;
@@ -108,52 +113,18 @@ namespace Duplicati.CommandLine.RecoveryTool
                 var hashesprblock = blocksize / (blockhasher.HashSize / 8);
 
                 Console.WriteLine("Building lookup table for file hashes");
-                using (HashLookupHelper lookup = new HashLookupHelper(ixfile, mru, (int) blocksize, blockhasher.HashSize / 8))
+                // Source OS can have different directory separator
+                string sourceDirsep = null;
+                using (HashLookupHelper lookup = new HashLookupHelper(ixfile, mru, (int)blocksize, blockhasher.HashSize / 8))
                 {
                     var filecount = 0L;
-                    string largestprefix = null;
-                    string[] largestprefixparts = null;
 
                     if (!string.IsNullOrWhiteSpace(targetpath))
                         Console.WriteLine("Computing restore path");
 
-                    foreach (var f in List.EnumerateFilesInDList(filelist, filter, options))
-                    {
-                        if (largestprefix == null)
-                        {
-                            largestprefix = f.Path;
-                            largestprefixparts = largestprefix.Split(new char[] { Path.DirectorySeparatorChar });
-                        }
-                        else if (largestprefix.Length > 1)
-                        {
-                            var parts = f.Path.Split(new char[] { Path.DirectorySeparatorChar });
-
-                            var ni = 0;
-                            for (; ni < Math.Min(parts.Length, largestprefixparts.Length); ni++)
-                                if (!Library.Utility.Utility.ClientFilenameStringComparer.Equals(parts[ni], largestprefixparts[ni]))
-                                    break;
-
-                            if (ni != largestprefixparts.Length)
-                            {
-                                if (ni == 0)
-                                {
-                                    largestprefixparts = new string[0];
-                                    largestprefix = string.Empty;
-                                }
-                                else
-                                {
-                                    Array.Resize(ref largestprefixparts, ni - 1);
-                                    largestprefix = string.Join(Util.DirectorySeparatorString, largestprefixparts);
-                                }
-                            }
-                        }
-                        filecount++;
-                    }
+                    string largestprefix = GetLargestPrefix(from f in List.EnumerateFilesInDList(filelist, filter, options) select f.Path, out sourceDirsep, out filecount);
 
                     Console.WriteLine("Restoring {0} files to {1}", filecount, string.IsNullOrWhiteSpace(targetpath) ? "original position" : targetpath);
-
-                    if (Platform.IsClientPosix || largestprefix.Length > 0)
-                        largestprefix = Util.AppendDirSeparator(largestprefix);
 
                     if (!string.IsNullOrEmpty(largestprefix))
                         Console.WriteLine("Removing common prefix {0} from files", largestprefix);
@@ -163,7 +134,7 @@ namespace Duplicati.CommandLine.RecoveryTool
                     {
                         try
                         {
-                            var targetfile = MapToRestorePath(f.Path, largestprefix, targetpath);
+                            var targetfile = MapToRestorePath(f.Path, largestprefix, targetpath, sourceDirsep);
                             if (!systemIO.DirectoryExists(systemIO.PathGetDirectoryName(targetfile)))
                                 systemIO.DirectoryCreate(systemIO.PathGetDirectoryName(targetfile));
 
@@ -175,7 +146,8 @@ namespace Duplicati.CommandLine.RecoveryTool
                                 {
                                     if (f.BlocklistHashes == null)
                                     {
-                                        lookup.WriteHash(sw, f.Hash);
+                                        if (f.Size > 0)
+                                            lookup.WriteHash(sw, f.Hash);
                                     }
                                     else
                                     {
@@ -247,8 +219,71 @@ namespace Duplicati.CommandLine.RecoveryTool
             return 0;
         }
 
-        private static string MapToRestorePath(string path, string prefixpath, string restorepath)
+        public static string GetLargestPrefix(IEnumerable<string> filePaths, out string sourceDirsep, out long filecount)
         {
+            // Get dir separator like in LocalRestoreDatabase.GetLargestPrefix():
+            string largestprefix = filePaths.OrderByDescending(p => p.Length).FirstOrDefault() ?? string.Empty;
+            sourceDirsep = Util.GuessDirSeparator(largestprefix);
+
+
+            string[] dirsepSplit = new string[] { sourceDirsep };
+            string[] largestprefixparts = largestprefix.Split(dirsepSplit, StringSplitOptions.None);
+
+            // Because only files are in the list, need to remove filename from prefix
+            // Otherwise, in case of a single file the prefix is not a directory
+            if (largestprefixparts.Length > 0)
+            {
+                Array.Resize(ref largestprefixparts, largestprefixparts.Length - 1);
+            }
+            largestprefix = string.Join(sourceDirsep, largestprefixparts);
+
+
+
+            filecount = 0;
+            foreach (var path in filePaths)
+            {
+                if (largestprefix.Length > 1)
+                {
+                    // Unix paths starting with / have an empty string in paths[0]
+                    // Completely empty strings should not combine with that, so should have no parts at all
+                    var parts = path.Length == 0 ? new string[0] : path.Split(dirsepSplit, StringSplitOptions.None);
+
+                    var ni = 0;
+                    for (; ni < Math.Min(parts.Length, largestprefixparts.Length); ni++)
+                        if (!Library.Utility.Utility.ClientFilenameStringComparer.Equals(parts[ni], largestprefixparts[ni]))
+                            break;
+
+                    if (ni != largestprefixparts.Length)
+                    {
+                        if (ni == 0)
+                        {
+                            largestprefixparts = new string[0];
+                            largestprefix = string.Empty;
+                        }
+                        else
+                        {
+                            // Only the first ni parts match
+                            Array.Resize(ref largestprefixparts, ni);
+                            largestprefix = string.Join(sourceDirsep, largestprefixparts);
+                        }
+                    }
+                }
+                filecount++;
+            }
+            return largestprefixparts.Length == 0 ? "" : Util.AppendDirSeparator(largestprefix, sourceDirsep);
+        }
+
+        public static string MapToRestorePath(string path, string prefixpath, string restorepath, string sourceDirsep)
+        {
+            if (sourceDirsep != null && sourceDirsep != Util.DirectorySeparatorString && sourceDirsep != Util.AltDirectorySeparatorString)
+            {
+                // Replace directory separator in source and prefix path
+                path = path.Replace(sourceDirsep, Util.DirectorySeparatorString);
+                if (!string.IsNullOrWhiteSpace(prefixpath))
+                {
+                    prefixpath = prefixpath.Replace(sourceDirsep, Util.DirectorySeparatorString);
+                }
+            }
             if (string.IsNullOrWhiteSpace(restorepath))
                 return path;
 

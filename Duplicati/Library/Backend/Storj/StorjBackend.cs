@@ -1,12 +1,29 @@
-﻿using Duplicati.Library.Common.IO;
+// Copyright (C) 2024, The Duplicati Team
+// https://duplicati.com, hello@duplicati.com
+// 
+// Permission is hereby granted, free of charge, to any person obtaining a 
+// copy of this software and associated documentation files (the "Software"), 
+// to deal in the Software without restriction, including without limitation 
+// the rights to use, copy, modify, merge, publish, distribute, sublicense, 
+// and/or sell copies of the Software, and to permit persons to whom the 
+// Software is furnished to do so, subject to the following conditions:
+// 
+// The above copyright notice and this permission notice shall be included in 
+// all copies or substantial portions of the Software.
+// 
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS 
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER 
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING 
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
+// DEALINGS IN THE SOFTWARE.
+using Duplicati.Library.Common.IO;
 using Duplicati.Library.Interface;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Linq.Expressions;
-using System.Runtime.InteropServices;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using uplink.NET.Interfaces;
@@ -48,26 +65,12 @@ namespace Duplicati.Library.Backend.Storj
             { "Access grant", "Access grant" },
         };
 
-        [DllImport("kernel32.dll")]
-        protected static extern IntPtr LoadLibrary(string filename);
-
         private static bool _libraryLoaded = false;
         private static void InitStorjLibrary()
         {
             if (_libraryLoaded)
                 return;
 
-            if (Duplicati.Library.Common.Platform.IsClientWindows) //We need to init only on Windows to distinguish between x64 and x86
-            {
-                if (System.Environment.Is64BitProcess)
-                {
-                    var res = LoadLibrary("win-x64/storj_uplink.dll");
-                }
-                else
-                {
-                    var res = LoadLibrary("win-x86/storj_uplink.dll");
-                }
-            }
             Access.SetTempDirectory(Library.Utility.TempFolder.SystemTempPath);
             _libraryLoaded = true;
         }
@@ -261,7 +264,13 @@ namespace Duplicati.Library.Backend.Storj
             custom.Entries.Add(new CustomMetadataEntry { Key = StorjFile.STORJ_LAST_MODIFICATION, Value = DateTime.Now.ToUniversalTime().ToString("O") });
             using (var upload = await _objectService.UploadObjectAsync(bucket, GetBasePath() + remotename, new UploadOptions(), stream, custom, false).ConfigureAwait(false))
             using (var reg = cancelToken.Register(() => upload.Cancel(), false))
+            {
                 await upload.StartUploadAsync();
+                if(upload.Failed)
+                {
+                    throw new Exception(upload.ErrorMessage);
+                }
+            }
             cancelToken.ThrowIfCancellationRequested();
         }
 

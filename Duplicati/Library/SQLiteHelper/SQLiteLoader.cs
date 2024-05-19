@@ -1,26 +1,31 @@
-﻿#region Disclaimer / License
-// Copyright (C) 2015, The Duplicati Team
-// http://www.duplicati.com, info@duplicati.com
+﻿// Copyright (C) 2024, The Duplicati Team
+// https://duplicati.com, hello@duplicati.com
 // 
-// This library is free software; you can redistribute it and/or
-// modify it under the terms of the GNU Lesser General Public
-// License as published by the Free Software Foundation; either
-// version 2.1 of the License, or (at your option) any later version.
+// Permission is hereby granted, free of charge, to any person obtaining a 
+// copy of this software and associated documentation files (the "Software"), 
+// to deal in the Software without restriction, including without limitation 
+// the rights to use, copy, modify, merge, publish, distribute, sublicense, 
+// and/or sell copies of the Software, and to permit persons to whom the 
+// Software is furnished to do so, subject to the following conditions:
 // 
-// This library is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
-// Lesser General Public License for more details.
+// The above copyright notice and this permission notice shall be included in 
+// all copies or substantial portions of the Software.
 // 
-// You should have received a copy of the GNU Lesser General Public
-// License along with this library; if not, write to the Free Software
-// Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
-// 
-#endregion
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS 
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER 
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING 
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
+// DEALINGS IN THE SOFTWARE.
+
+#nullable enable
+
 using System;
 using System.IO;
 using Duplicati.Library.Common;
-using System.Data.SQLite;
+using Duplicati.Library.Common.IO;
+using Duplicati.Library.Interface;
 
 namespace Duplicati.Library.SQLiteHelper
 {
@@ -32,29 +37,27 @@ namespace Duplicati.Library.SQLiteHelper
         private static readonly string LOGTAG = Logging.Log.LogTagFromType(typeof(SQLiteLoader));
 
         /// <summary>
-        /// A cached copy of the type
-        /// </summary>
-        private static Type m_type = null;
-
-        /// <summary>
         /// Helper method with logic to handle opening a database in possibly encrypted format
         /// </summary>
         /// <param name="con">The SQLite connection object</param>
         /// <param name="databasePath">The location of Duplicati's database.</param>
-        /// <param name="useDatabaseEncryption">Specify if database is encrypted</param>
-        /// <param name="password">Encryption password</param>
-        public static void OpenDatabase(System.Data.IDbConnection con, string databasePath, bool useDatabaseEncryption, string password)
+        /// <param name="decryptionPassword">The password to use for decryption.</param>
+        public static void OpenDatabase(System.Data.IDbConnection con, string databasePath, string? decryptionPassword)
         {
-            var setPwdMethod = con.GetType().GetMethod("SetPassword", new[] { typeof(string) });
-            string attemptedPassword;
-
-            if (!useDatabaseEncryption || string.IsNullOrEmpty(password))
-                attemptedPassword = null; //No encryption specified, attempt to open without
-            else
-                attemptedPassword = password; //Encryption specified, attempt to open with
-
-            if (setPwdMethod != null)
-                setPwdMethod.Invoke(con, new object[] { attemptedPassword });
+            if (!string.IsNullOrWhiteSpace(decryptionPassword) && SQLiteRC4Decrypter.IsDatabaseEncrypted(databasePath))
+            {
+                Logging.Log.WriteWarningMessage(LOGTAG, "SQLiteRC4Decrypter", null, "Database is encrypted, attempting to decrypt...");
+                try
+                {
+                    SQLiteRC4Decrypter.DecryptSQLiteFile(databasePath, decryptionPassword);
+                    Logging.Log.WriteInformationMessage(LOGTAG, "SQLiteRC4Decrypter", "Database decrypted successfully.");
+                }
+                catch (Exception ex)
+                {
+                    Logging.Log.WriteErrorMessage(LOGTAG, "SQLiteRC4Decrypter", ex, "Failed to decrypt database");
+                    throw new UserInformationException($"The database appears to be encrypted, but the decrypting failed. Please check the password. Error message: {ex.Message}", "RC4DecryptionFailed", ex);
+                }
+            }
 
             try
             {
@@ -64,36 +67,14 @@ namespace Duplicati.Library.SQLiteHelper
             }
             catch
             {
-                try
-                {
-                    //We can't try anything else without a password
-                    if (string.IsNullOrEmpty(password))
-                        throw;
+                try { con.Dispose(); }
+                catch { }
 
-                    //Open failed, now try the reverse
-                    attemptedPassword = attemptedPassword == null ? password : null;
-
-                    con.Close();
-                    if (setPwdMethod != null)
-                        setPwdMethod.Invoke(con, new object[] { attemptedPassword });
-                    OpenSQLiteFile(con, databasePath);
-
-                    TestSQLiteFile(con);
-                }
-                catch
-                {
-                    try { con.Close(); }
-                    catch (Exception ex) { Logging.Log.WriteExplicitMessage(LOGTAG, "OpenDatabaseFailed", ex, "Failed to open the SQLite database: {0}", databasePath); }
-                }
-
-                //If the db is not open now, it won't open
-                if (con.State != System.Data.ConnectionState.Open)
-                    throw; //Report original error
-
-                //The open method succeeded with the non-default method, now change the password
-                var changePwdMethod = con.GetType().GetMethod("ChangePassword", new[] { typeof(string) });
-                changePwdMethod.Invoke(con, new object[] { useDatabaseEncryption ? password : null });
+                throw;
             }
+
+            if (con.State != System.Data.ConnectionState.Open)
+                throw new UserInformationException("Failed to open database for unknown reason, check the logs to see error messages", "DatabaseOpenFailed");
         }
 
         /// <summary>
@@ -102,12 +83,12 @@ namespace Duplicati.Library.SQLiteHelper
         /// <returns>The SQLite connection instance.</returns>
         public static System.Data.IDbConnection LoadConnection()
         {
-            System.Data.IDbConnection con = null;
+            System.Data.IDbConnection? con = null;
             SetEnvironmentVariablesForSQLiteTempDir();
 
             try
             {
-                con = (System.Data.IDbConnection)Activator.CreateInstance(Duplicati.Library.SQLiteHelper.SQLiteLoader.SQLiteConnectionType);
+                con = (System.Data.IDbConnection?)Activator.CreateInstance(Duplicati.Library.SQLiteHelper.SQLiteLoader.SQLiteConnectionType);
             }
             catch (Exception ex)
             {
@@ -117,7 +98,7 @@ namespace Duplicati.Library.SQLiteHelper
                 throw;
             }
 
-            return con;
+            return con ?? throw new InvalidOperationException("Failed to load connection");
         }
 
         /// <summary>
@@ -129,7 +110,7 @@ namespace Duplicati.Library.SQLiteHelper
         {
             if (string.IsNullOrWhiteSpace(targetpath))
                 throw new ArgumentNullException(nameof(targetpath));
-                
+
             System.Data.IDbConnection con = LoadConnection();
 
             try
@@ -144,24 +125,28 @@ namespace Duplicati.Library.SQLiteHelper
                 throw;
             }
 
-	    // set custom Sqlite options
+            // set custom Sqlite options
             var opts = Environment.GetEnvironmentVariable("CUSTOMSQLITEOPTIONS_DUPLICATI");
-            if (opts != null) {
-                var topts = opts.Split(new char[]{';'}, StringSplitOptions.RemoveEmptyEntries);
-                if (topts.Length > 0) {
-                    using (var cmd = con.CreateCommand()) {
-                        foreach (var opt in topts) {
+            if (opts != null)
+            {
+                var topts = opts.Split(new char[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
+                if (topts.Length > 0)
+                {
+                    using (var cmd = con.CreateCommand())
+                    {
+                        foreach (var opt in topts)
+                        {
                             Logging.Log.WriteVerboseMessage(LOGTAG, "CustomSQLiteOption", @"Setting custom SQLite option '{0}'.", opt);
                             try
                             {
                                 cmd.CommandText = string.Format("pragma {0}", opt);
                                 cmd.ExecuteNonQuery();
                             }
-			    catch (Exception ex)
+                            catch (Exception ex)
                             {
-                               Logging.Log.WriteErrorMessage(LOGTAG, "CustomSQLiteOption", ex, @"Error setting custom SQLite option '{0}'.", opt);
+                                Logging.Log.WriteErrorMessage(LOGTAG, "CustomSQLiteOption", ex, @"Error setting custom SQLite option '{0}'.", opt);
                             }
-	                }
+                        }
                     }
                 }
             }
@@ -176,7 +161,26 @@ namespace Duplicati.Library.SQLiteHelper
         {
             get
             {
-                return typeof(SQLiteConnection);
+                return typeof(System.Data.SQLite.SQLiteConnection);
+            }
+        }
+
+        /// <summary>
+        /// Returns the version string from the SQLite type
+        /// </summary>
+        public static string? SQLiteVersion
+        {
+            get
+            {
+                var versionString = SQLiteConnectionType.GetProperty("SQLiteVersion")?.GetValue(null, null) as string;
+                if (string.IsNullOrWhiteSpace(versionString))
+                {
+                    // Support for Microsoft.Data.SQLite
+                    // NOTE: Has an issue with ? as position parameters
+                    var inst = Activator.CreateInstance(SQLiteConnectionType);
+                    versionString = SQLiteConnectionType.GetProperty("ServerVersion")?.GetValue(inst, null) as string;
+                }
+                return versionString;
             }
         }
 
@@ -196,7 +200,7 @@ namespace Duplicati.Library.SQLiteHelper
         /// Wrapper to dispose the SQLite connection
         /// </summary>
         /// <param name="con">The connection to close.</param>
-        private static void DisposeConnection(System.Data.IDbConnection con)
+        private static void DisposeConnection(System.Data.IDbConnection? con)
         {
             if (con != null)
                 try { con.Dispose(); }
@@ -232,11 +236,11 @@ namespace Duplicati.Library.SQLiteHelper
         [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
         private static void SetUnixPermissionUserRWOnly(string path)
         {
-            var fi = UnixSupport.File.GetUserGroupAndPermissions(path);
-            UnixSupport.File.SetUserGroupAndPermissions(
-                    path, 
-                    fi.UID, 
-                    fi.GID, 
+            var fi = PosixFile.GetUserGroupAndPermissions(path);
+            PosixFile.SetUserGroupAndPermissions(
+                    path,
+                    fi.UID,
+                    fi.GID,
                     0x180 /* FilePermissions.S_IRUSR | FilePermissions.S_IWUSR*/
                 );
         }

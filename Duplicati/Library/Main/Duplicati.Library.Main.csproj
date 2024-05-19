@@ -1,36 +1,22 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>    
-    <Copyright>LGPL, Copyright © Duplicati Team 2021</Copyright>
-    <Description>The main Duplicati implementation module</Description>
+    <TargetFramework>net8.0</TargetFramework>
+    <OutputType>Library</OutputType>
   </PropertyGroup>
   
-  <ItemGroup>
-    <PackageReference Include="Newtonsoft.Json" Version="13.0.2" />
-  </ItemGroup>
-
   <ItemGroup>	
     <ProjectReference Include="..\..\License\Duplicati.License.csproj" />	
     <ProjectReference Include="..\Compression\Duplicati.Library.Compression.csproj" />	
-    <ProjectReference Include="..\Utility\Duplicati.Library.Utility.csproj">
-    </ProjectReference>
-    <ProjectReference Include="..\DynamicLoader\Duplicati.Library.DynamicLoader.csproj">
-    </ProjectReference>
-    <ProjectReference Include="..\Interface\Duplicati.Library.Interface.csproj">
-    </ProjectReference>
-    <ProjectReference Include="..\Logging\Duplicati.Library.Logging.csproj">
-    </ProjectReference>
-    <ProjectReference Include="..\Snapshots\Duplicati.Library.Snapshots.csproj">
-    </ProjectReference>
-    <ProjectReference Include="..\SQLiteHelper\Duplicati.Library.SQLiteHelper.csproj">
-    </ProjectReference>
-    <ProjectReference Include="..\Localization\Duplicati.Library.Localization.csproj">
-    </ProjectReference>
-    <ProjectReference Include="..\UsageReporter\Duplicati.Library.UsageReporter.csproj">
-    </ProjectReference>
-    <ProjectReference Include="..\Modules\Builtin\Duplicati.Library.Modules.Builtin.csproj">
-    </ProjectReference>
+    <ProjectReference Include="..\Utility\Duplicati.Library.Utility.csproj" />
+    <ProjectReference Include="..\DynamicLoader\Duplicati.Library.DynamicLoader.csproj" />
+    <ProjectReference Include="..\Interface\Duplicati.Library.Interface.csproj" />
+    <ProjectReference Include="..\Logging\Duplicati.Library.Logging.csproj" />
+    <ProjectReference Include="..\Snapshots\Duplicati.Library.Snapshots.csproj" />
+    <ProjectReference Include="..\SQLiteHelper\Duplicati.Library.SQLiteHelper.csproj" />
+    <ProjectReference Include="..\Localization\Duplicati.Library.Localization.csproj" />
+    <ProjectReference Include="..\UsageReporter\Duplicati.Library.UsageReporter.csproj" />
+    <ProjectReference Include="..\Modules\Builtin\Duplicati.Library.Modules.Builtin.csproj" />
   </ItemGroup>
   
   <ItemGroup>
@@ -56,10 +42,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.DotNet.Analyzers.Compatibility" Version="0.2.12-alpha">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
+    <PackageReference Include="CoCoL" Version="1.7.1" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
   </ItemGroup>
 
 </Project>

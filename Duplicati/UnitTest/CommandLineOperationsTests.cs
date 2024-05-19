@@ -1,19 +1,24 @@
-﻿//  Copyright (C) 2015, The Duplicati Team
-//  http://www.duplicati.com, info@duplicati.com
-//
-//  This library is free software; you can redistribute it and/or modify
-//  it under the terms of the GNU Lesser General Public License as
-//  published by the Free Software Foundation; either version 2.1 of the
-//  License, or (at your option) any later version.
-//
-//  This library is distributed in the hope that it will be useful, but
-//  WITHOUT ANY WARRANTY; without even the implied warranty of
-//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
-//  Lesser General Public License for more details.
-//
-//  You should have received a copy of the GNU Lesser General Public
-//  License along with this library; if not, write to the Free Software
-//  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+﻿// Copyright (C) 2024, The Duplicati Team
+// https://duplicati.com, hello@duplicati.com
+// 
+// Permission is hereby granted, free of charge, to any person obtaining a 
+// copy of this software and associated documentation files (the "Software"), 
+// to deal in the Software without restriction, including without limitation 
+// the rights to use, copy, modify, merge, publish, distribute, sublicense, 
+// and/or sell copies of the Software, and to permit persons to whom the 
+// Software is furnished to do so, subject to the following conditions:
+// 
+// The above copyright notice and this permission notice shall be included in 
+// all copies or substantial portions of the Software.
+// 
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS 
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, 
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE 
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER 
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING 
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER 
+// DEALINGS IN THE SOFTWARE.
+
 using System;
 using NUnit.Framework;
 using System.Collections.Generic;
@@ -21,6 +26,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Threading.Tasks;
 using Duplicati.Library.Utility;
 
 namespace Duplicati.UnitTest
@@ -45,8 +51,6 @@ namespace Duplicati.UnitTest
         private readonly string zipAlternativeFilename = "data-alternative.zip";
         private string zipAlternativeFilepath => Path.Combine(BASEFOLDER, this.zipAlternativeFilename);
 
-        private HttpClient httpClient;
-
         protected virtual IEnumerable<string> SourceDataFolders
         {
             get
@@ -58,19 +62,9 @@ namespace Duplicati.UnitTest
             }
         }
 
-        public override void OneTimeSetUp()
+        [SetUp]
+        public void SetUp()
         {
-            base.OneTimeSetUp();
-            httpClient = new HttpClient(new HttpClientHandler()
-            {
-                UseCookies = false
-            });
-        }
-
-        public override void SetUp()
-        {
-            base.SetUp();
-
             if (!systemIO.FileExists(zipAlternativeFilepath))
             {
                 var url = $"{S3_URL}{this.zipFilename}";
@@ -83,43 +77,68 @@ namespace Duplicati.UnitTest
             }
         }
 
-        private void DownloadS3FileIfNewer(string destinationFilePath, string url)
+        private void DownloadS3FileIfNewer(string destinationFilePath, string url, int retries = 5)
+            => DownloadS3FileIfNewerAsync(destinationFilePath, url, retries).Wait();
+
+        private async Task DownloadS3FileIfNewerAsync(string destinationFilePath, string url, int retries = 5)
         {
-            var req = new HttpRequestMessage(HttpMethod.Get, url);
-
-            if (systemIO.FileExists(destinationFilePath))
+            do
             {
-                req.Headers.IfModifiedSince = systemIO.FileGetLastWriteTimeUtc(destinationFilePath);
-            }
-
-            try
-            {
-                // check if the file should be downloaded
-                using (var resp = httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead).Await())
+                try
                 {
-                    if (resp.StatusCode == HttpStatusCode.NotModified)
+                    using var httpClient = new HttpClient();
+                    using var request = new HttpRequestMessage(HttpMethod.Get, url);
+
+                    if (systemIO.FileExists(destinationFilePath))
+                        request.Headers.IfModifiedSince = systemIO.FileGetLastWriteTimeUtc(destinationFilePath);
+
+                    using var response = await httpClient.SendAsync(request);
+                    using var tmpFile = new TempFile();
+
+                    if (response.StatusCode == System.Net.HttpStatusCode.NotModified)
                     {
-                        Console.WriteLine("file to download {0} already exists and is up to date", destinationFilePath);
+                        Console.WriteLine("File has not been modified since last download.");
                         return;
                     }
-                    resp.EnsureSuccessStatusCode();
-                    Console.WriteLine("downloading test file to: {0}, length: {1}", destinationFilePath, resp.Content.Headers.ContentLength);
+                    else
+                    {
+                        Console.WriteLine($"Downloading file from {url} to: {tmpFile}");
+                        var contentStream = await response.Content.ReadAsStreamAsync();
+                        var fileInfo = new FileInfo(tmpFile);
+                        using (var fileStream = fileInfo.OpenWrite())
+                            await contentStream.CopyToAsync(fileStream);
+
+                        // After download, check if the file length matches the response length
+                        long responseLength = response.Content.Headers.ContentLength ?? 0;
+                        long fileLength = new FileInfo(tmpFile).Length;
+                        if (responseLength != fileLength)
+                            throw new Exception($"Downloaded file length {fileLength} does not match response length {responseLength}");
+
+                        Console.WriteLine($"Download completed, moving to {destinationFilePath}");
+                        File.Move(tmpFile, destinationFilePath, true);
+                        return;
+                    }
                 }
-                TestUtils.DownloadFile(httpClient, destinationFilePath, url);
-            }
-            catch (HttpRequestException ex)
-            {
-                Console.WriteLine("download exception: {0}", ex.Message);
-            }
+                catch (Exception ex)
+                {
+                    retries--;
+                    Console.WriteLine($"Download failed: {ex.Message}");
+                    if (retries <= 0)
+                        throw;
+
+                    await Task.Delay(TimeSpan.FromSeconds(1)).ConfigureAwait(false);
+                    Console.WriteLine($"Retrying download, {retries} retries left.");
+                }
+            } while (retries > 0);
         }
 
-        public override void OneTimeTearDown()
+        [OneTimeTearDown]
+        public void OneTimeTearDown()
         {
             if (systemIO.DirectoryExists(this.SOURCEFOLDER))
             {
                 systemIO.DirectoryDelete(this.SOURCEFOLDER, true);
             }
-            httpClient = null;
         }
 
         [Test]
@@ -135,6 +154,7 @@ namespace Duplicati.UnitTest
         [Category("BulkNoSize")]
         public void RunCommandsWithoutSize()
         {
+            Duplicati.Library.DynamicLoader.BackendLoader.AddBackend(new SizeOmittingBackend());
             DoRunCommands(new SizeOmittingBackend().ProtocolKey + "://" + TARGETFOLDER);
         }
 
@@ -161,17 +181,17 @@ namespace Duplicati.UnitTest
 
                 ProgressWriteLine("Running backup with {0} data added ...", Duplicati.Library.Utility.Utility.FormatSizeString(size));
                 using (new Library.Logging.Timer(LOGTAG, "BackupWithDataAdded", string.Format("Backup with {0} data added", Duplicati.Library.Utility.Utility.FormatSizeString(size))))
-                    Duplicati.CommandLine.Program.RealMain(backupargs);
+                    Duplicati.CommandLine.Program.Main(backupargs);
 
                 ProgressWriteLine("Testing data ...");
                 using (new Library.Logging.Timer(LOGTAG, "TestRemoteData", "Test remote data"))
-                    if (Duplicati.CommandLine.Program.RealMain((new string[] { "test", target, "all" }.Union(opts)).ToArray()) != 0)
+                    if (Duplicati.CommandLine.Program.Main((new string[] { "test", target, "all" }.Union(opts)).ToArray()) != 0)
                         throw new Exception("Failed during remote verification");
             }
 
             ProgressWriteLine("Running unchanged backup ...");
             using (new Library.Logging.Timer(LOGTAG, "UnchangedBackup", "Unchanged backup"))
-                Duplicati.CommandLine.Program.RealMain(backupargs);
+                Duplicati.CommandLine.Program.Main(backupargs);
 
             var datafolders = systemIO.EnumerateDirectories(DATAFOLDER);
 
@@ -182,7 +202,7 @@ namespace Duplicati.UnitTest
 
             ProgressWriteLine("Running backup with renamed folder...");
             using (new Library.Logging.Timer(LOGTAG, "BackupWithRenamedFolder", "Backup with renamed folder"))
-                Duplicati.CommandLine.Program.RealMain(backupargs);
+                Duplicati.CommandLine.Program.Main(backupargs);
 
             datafolders = systemIO.EnumerateDirectories(DATAFOLDER);
 
@@ -199,11 +219,11 @@ namespace Duplicati.UnitTest
 
             ProgressWriteLine("Running backup with deleted data...");
             using (new Library.Logging.Timer(LOGTAG, "BackupWithDeletedData", "Backup with deleted data"))
-                Duplicati.CommandLine.Program.RealMain(backupargs);
+                Duplicati.CommandLine.Program.Main(backupargs);
 
             ProgressWriteLine("Testing the compare method ...");
             using (new Library.Logging.Timer(LOGTAG, "CompareMethod", "Compare method"))
-                Duplicati.CommandLine.Program.RealMain((new string[] { "compare", target, "0", "1" }.Union(opts)).ToArray());
+                Duplicati.CommandLine.Program.Main((new string[] { "compare", target, "0", "1" }.Union(opts)).ToArray());
 
             for (var i = 0; i < 5; i++)
             {
@@ -211,12 +231,12 @@ namespace Duplicati.UnitTest
                 systemIO.FileCopy(LOGFILE, Path.Combine(SOURCEFOLDER, Path.GetFileName(LOGFILE)), true);
 
                 using (new Library.Logging.Timer(LOGTAG, "BackupWithLogfileChange", string.Format("Backup with logfilechange {0}", i + 1)))
-                    Duplicati.CommandLine.Program.RealMain(backupargs);
+                    Duplicati.CommandLine.Program.Main(backupargs);
             }
 
             ProgressWriteLine("Compacting data ...");
             using (new Library.Logging.Timer(LOGTAG, "Compacting", "Compacting"))
-                Duplicati.CommandLine.Program.RealMain((new string[] { "compact", target, "--small-file-max-count=2" }.Union(opts)).ToArray());
+                Duplicati.CommandLine.Program.Main((new string[] { "compact", target, "--small-file-max-count=2" }.Union(opts)).ToArray());
 
 
             datafolders = systemIO.EnumerateDirectories(DATAFOLDER);
@@ -224,7 +244,7 @@ namespace Duplicati.UnitTest
 
             ProgressWriteLine("Partial restore of {0} ...", Path.GetFileName(rf));
             using (new Library.Logging.Timer(LOGTAG, "PartialRestore", "Partial restore"))
-                Duplicati.CommandLine.Program.RealMain((new string[] { "restore", target, rf + "*", "--restore-path=\"" + RESTOREFOLDER + "\"" }.Union(opts)).ToArray());
+                Duplicati.CommandLine.Program.Main((new string[] { "restore", target, rf + "*", "--restore-path=\"" + RESTOREFOLDER + "\"" }.Union(opts)).ToArray());
 
             ProgressWriteLine("Verifying partial restore ...");
             using (new Library.Logging.Timer(LOGTAG, "VerificationOfPartialRestore", "Verification of partial restored files"))
@@ -234,7 +254,7 @@ namespace Duplicati.UnitTest
 
             ProgressWriteLine("Partial restore of {0} without local db...", Path.GetFileName(rf));
             using (new Library.Logging.Timer(LOGTAG, "PartialRestoreWithoutLocalDb", "Partial restore without local db"))
-                Duplicati.CommandLine.Program.RealMain((new string[] { "restore", target, rf + "*", "--restore-path=\"" + RESTOREFOLDER + "\"", "--no-local-db" }.Union(opts)).ToArray());
+                Duplicati.CommandLine.Program.Main((new string[] { "restore", target, rf + "*", "--restore-path=\"" + RESTOREFOLDER + "\"", "--no-local-db" }.Union(opts)).ToArray());
 
             ProgressWriteLine("Verifying partial restore ...");
             using (new Library.Logging.Timer(LOGTAG, "VerificationOfPartialRestore", "Verification of partial restored files"))
@@ -244,7 +264,7 @@ namespace Duplicati.UnitTest
 
             ProgressWriteLine("Full restore ...");
             using (new Library.Logging.Timer(LOGTAG, "FullRestore", "Full restore"))
-                Duplicati.CommandLine.Program.RealMain((new string[] { "restore", target, "*", "--restore-path=\"" + RESTOREFOLDER + "\"" }.Union(opts)).ToArray());
+                Duplicati.CommandLine.Program.Main((new string[] { "restore", target, "*", "--restore-path=\"" + RESTOREFOLDER + "\"" }.Union(opts)).ToArray());
 
             ProgressWriteLine("Verifying full restore ...");
             using (new Library.Logging.Timer(LOGTAG, "VerificationOfFullRestore", "Verification of restored files"))
@@ -255,7 +275,7 @@ namespace Duplicati.UnitTest
 
             ProgressWriteLine("Full restore without local db...");
             using (new Library.Logging.Timer(LOGTAG, "FullRestoreWithoutDb", "Full restore without local db"))
-                Duplicati.CommandLine.Program.RealMain((new string[] { "restore", target, "*", "--restore-path=\"" + RESTOREFOLDER + "\"", "--no-local-db" }.Union(opts)).ToArray());
+                Duplicati.CommandLine.Program.Main((new string[] { "restore", target, "*", "--restore-path=\"" + RESTOREFOLDER + "\"", "--no-local-db" }.Union(opts)).ToArray());
 
             ProgressWriteLine("Verifying full restore ...");
             using (new Library.Logging.Timer(LOGTAG, "VerificationOfFullRestoreWithoutDb", "Verification of restored files"))
@@ -264,7 +284,7 @@ namespace Duplicati.UnitTest
 
             ProgressWriteLine("Testing data ...");
             using (new Library.Logging.Timer(LOGTAG, "TestRemoteData", "Test remote data"))
-                if (Duplicati.CommandLine.Program.RealMain((new string[] { "test", target, "all" }.Union(opts)).ToArray()) != 0)
+                if (Duplicati.CommandLine.Program.Main((new string[] { "test", target, "all" }.Union(opts)).ToArray()) != 0)
                     throw new Exception("Failed during final remote verification");
         }
     }
