@@ -16,15 +16,14 @@ namespace Duplicati.UnitTest
     class DatabaseQueryTests : BasicSetupHelper
     {
         private readonly string testDbFilepath = Path.Combine(BASEFOLDER, "test-db.sqlite");
-
+        private StreamLogDestination logDestination;
         private IDisposable logScope;
 
         private readonly string LOGTAG = "DatabaseQueryTest";
 
         [SetUp]
-        public override void SetUp()
+        public void SetUp()
         {
-            base.SetUp();
             if (!systemIO.FileExists(testDbFilepath))
             {
                 Assert.Inconclusive("No test DB in test folder!");
@@ -35,23 +34,23 @@ namespace Duplicati.UnitTest
         }
 
         [OneTimeSetUp]
-        public override void OneTimeSetUp()
+        public void OneTimeSetUp()
         {
-            base.OneTimeSetUp();
-            logScope = Log.StartScope(new StreamLogDestination(LOGFILE), LogMessageType.Profiling);
+            // Force log scope to Profiling
+            // This puts the profiling info for all queries in a single log file for analysis.
+            logDestination = new StreamLogDestination(LOGFILE); 
+            logScope = Log.StartScope(logDestination, LogMessageType.Profiling);
             Log.WriteInformationMessage(LOGTAG, "StartTest", "DatabaseQueryTest started");
+            // KeepLogfile prevents errors on teardown, because logScope locks the file
             KeepLogfile = true;
         }
 
         [OneTimeTearDown]
-        public override void OneTimeTearDown()
+        public void OneTimeTearDown()
         {
             Log.WriteInformationMessage(LOGTAG, "StartTest", "DatabaseQueryTest finished");
-            if (logScope != null)
-            {
-                logScope.Dispose();
-            }
-            base.OneTimeTearDown();
+            logScope?.Dispose();
+            logDestination?.Dispose();
         }
 
         [Test]
@@ -88,7 +87,7 @@ namespace Duplicati.UnitTest
                         }
                     }
                     remoteVolumes = null;
-                    int hashsize = HashAlgorithmHelper.Create(opt.BlockHashAlgorithm).HashSize / 8;
+                    int hashsize = HashFactory.HashSizeBytes(opt.BlockHashAlgorithm);
 
                     //db.VerifyConsistency(opt.Blocksize, hashsize, true, tr);
                     db.VerifyConsistency(opt.Blocksize, hashsize, false, tr);
@@ -189,7 +188,7 @@ namespace Duplicati.UnitTest
                         var blockEntries = (from v in db.GetRemoteVolumes(tr)
                                             where v.Type == RemoteVolumeType.Blocks
                                             select v).Take(5).ToList();
-                        int hashsize = HashAlgorithmHelper.Create(opt.BlockHashAlgorithm).HashSize / 8;
+                        int hashsize = HashFactory.HashSizeBytes(opt.BlockHashAlgorithm);
 
                         Assert.IsTrue(db.AddBlock("test-hash", 10, blockEntries[0].ID, tr));
                         Assert.AreNotEqual(-1, db.FindBlockID("test-hash", 10, tr));
@@ -474,7 +473,7 @@ namespace Duplicati.UnitTest
                         var blockEntries = (from v in db.GetRemoteVolumes(tr)
                                             where v.Type == RemoteVolumeType.Blocks
                                             select v).Take(5).ToList();
-                        int hashsize = HashAlgorithmHelper.Create(opt.BlockHashAlgorithm).HashSize / 8;
+                        int hashsize = HashFactory.HashSizeBytes(opt.BlockHashAlgorithm);
 
                         db.FindMissingBlocklistHashes(hashsize, opt.Blocksize, tr);
 
@@ -494,14 +493,14 @@ namespace Duplicati.UnitTest
                         db.AddFileEntry(filesetEntries[0].ID, prefixId, split.Value, DateTime.UtcNow, blockId, metaId, tr);
 
                         db.AddSmallBlocksetLink("test-hash-block", "test-hash-block", 20, tr);
+                        bool anyChange = false;
                         // Insert
-                        db.UpdateBlock("test-hash-meta", 20, blockEntries[0].ID, tr);
+                        db.UpdateBlock("test-hash-meta", 20, blockEntries[0].ID, tr, ref anyChange);
                         // Update
-                        db.UpdateBlock("test-hash-meta", 40, blockEntries[0].ID, tr);
+                        db.UpdateBlock("test-hash-meta", 40, blockEntries[0].ID, tr, ref anyChange);
 
-                        db.UpdateBlockset("test-hash-block", new[] { "test-hash-1" }, tr);
                         db.GetBlockLists(blockEntries[0].ID).Take(100).ToList();
-                        db.GetMissingBlockListVolumes(1, opt.Blocksize, hashsize);
+                        db.GetMissingBlockListVolumes(1, opt.Blocksize, hashsize, false);
                         db.CleanupMissingVolumes();
 
                         tr.Rollback();
@@ -538,7 +537,7 @@ namespace Duplicati.UnitTest
 
                     tr.Rollback();
                 }
-                int hashsize = HashAlgorithmHelper.Create(opt.BlockHashAlgorithm).HashSize / 8;
+                int hashsize = HashFactory.HashSizeBytes(opt.BlockHashAlgorithm);
 
                 long filesetId = db.GetFilesetIdFromRemotename(filesetEntries[0].Name);
                 Assert.AreEqual(filesetEntries[0].ID, filesetId);
@@ -599,7 +598,7 @@ namespace Duplicati.UnitTest
 
                     tr.Rollback();
                 }
-                int hashsize = HashAlgorithmHelper.Create(opt.BlockHashAlgorithm).HashSize / 8;
+                int hashsize = HashFactory.HashSizeBytes(opt.BlockHashAlgorithm);
 
                 var restoreCount = db.PrepareRestoreFilelist(new DateTime(0), new[] { 0L }, new FilterExpression("*.txt"));
                 Assert.NotZero(restoreCount.Item1);
@@ -666,7 +665,7 @@ namespace Duplicati.UnitTest
 
                     tr.Rollback();
                 }
-                int hashsize = HashAlgorithmHelper.Create(opt.BlockHashAlgorithm).HashSize / 8;
+                int hashsize = HashFactory.HashSizeBytes(opt.BlockHashAlgorithm);
 
                 db.UpdateVerificationCount(filesetEntries[0].Name);
 
