@@ -75,6 +75,14 @@
         <div ng-show="restore_step == 1 &amp;&amp; connecting == false" width="auto">
             <h1 translate>Restore options</h1>
 
+            <div class="input checkbox multiple leftflush" ng-hide="IsBackupTemporary">
+                <input id="restorenolocal" type="radio" name="restorelocal" ng-model="NoLocalBlocks" value="true" />
+                <label for="restorenolocal" translate>Full restore: Always use backup data. Use this to verify that the backup data is valid.</label>
+                <br />
+                <input id="restorewithlocal" type="radio" name="restorelocal" ng-model="NoLocalBlocks" value="false" />
+                <label for="restorewithlocal" translate>Fast restore: Reuse existing local files where possible. Use this if you just want to restore files.</label>
+            </div>
+
             <h2 translate>Where do you want to restore the files to?</h2>
             <div class="input checkbox multiple leftflush">
                 <input id="restoretooriginalpath" type="radio" name="restorelocation" ng-model="RestoreLocation" value="direct" />

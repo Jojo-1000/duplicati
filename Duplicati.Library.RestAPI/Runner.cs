@@ -192,7 +192,7 @@ namespace Duplicati.Server
 
         public static IRunnerData CreateRestoreTask(Duplicati.Server.Serialization.Interface.IBackup backup, string[] filters,
                                                     DateTime time, string restoreTarget, bool overwrite, bool restore_permissions,
-                                                    bool skip_metadata, string passphrase)
+                                                    bool skip_metadata, string passphrase, bool noLocalBlocks = false)
         {
             var dict = new Dictionary<string, string>
             {
@@ -200,7 +200,8 @@ namespace Duplicati.Server
                 ["overwrite"] = overwrite ? Boolean.TrueString : Boolean.FalseString,
                 ["restore-permissions"] = restore_permissions ? Boolean.TrueString : Boolean.FalseString,
                 ["skip-metadata"] = skip_metadata ? Boolean.TrueString : Boolean.FalseString,
-                ["allow-passphrase-change"] = Boolean.TrueString
+                ["allow-passphrase-change"] = Boolean.TrueString,
+                ["no-local-blocks"] = noLocalBlocks ? Boolean.TrueString : Boolean.FalseString
             };
             if (!string.IsNullOrWhiteSpace(restoreTarget))
                 dict["restore-path"] = SpecialFolders.ExpandEnvironmentVariables(restoreTarget);

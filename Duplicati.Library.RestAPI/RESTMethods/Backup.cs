@@ -225,8 +225,13 @@ namespace Duplicati.Server.WebServer.RESTMethods
 
             var permissions = Duplicati.Library.Utility.Utility.ParseBool(input["permissions"].Value, false);
             var skip_metadata = Duplicati.Library.Utility.Utility.ParseBool(input["skip-metadata"].Value, false);
+            bool noLocal = false;
+            if (input.Contains("no-local-blocks"))
+            {
+                noLocal = Duplicati.Library.Utility.Utility.ParseBool(input["no-local-blocks"].Value, false);
+            }
 
-            var task = Runner.CreateRestoreTask(backup, filters, time, restoreTarget, overwrite, permissions, skip_metadata, passphrase);
+            var task = Runner.CreateRestoreTask(backup, filters, time, restoreTarget, overwrite, permissions, skip_metadata, passphrase, noLocal);
 
             FIXMEGlobal.WorkThread.AddTask(task);
 

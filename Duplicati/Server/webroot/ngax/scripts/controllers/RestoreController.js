@@ -6,6 +6,7 @@ backupApp.controller('RestoreController', function ($rootScope, $scope, $routePa
     $scope.restore_step = 0;
     $scope.connecting = false;
     $scope.HideFolderBrowser = true;
+    $scope.NoLocalBlocks = 'true'; // This is a string for compatibility with select
     $scope.RestoreLocation = 'direct';
     $scope.RestoreMode = 'overwrite';
     $scope.passphrase = "";
@@ -337,7 +338,8 @@ backupApp.controller('RestoreController', function ($rootScope, $scope, $routePa
             'restore-path': $scope.RestoreLocation == 'custom' ? $scope.RestorePath : null,
             'overwrite': $scope.RestoreMode == 'overwrite',
             'permissions': $scope.RestorePermissions == null ? false : $scope.RestorePermissions,
-            'passphrase' : $scope.passphrase
+            'passphrase': $scope.passphrase,
+            'no-local-blocks': $scope.NoLocalBlocks == 'true'
         };
 
         var paths = [];
